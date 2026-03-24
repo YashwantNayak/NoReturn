@@ -62,97 +62,101 @@ const Auth: React.FC = () => {
 
   const handleEmailSignup = async () => {
     // Validation
-    if (!username.trim() || !email.trim() || !password.trim()) {
-      setError('Please fill in all fields');
+    if (!username.trim()) {
+      setError('Naam daalo');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Email daalo');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password kam se kam 6 characters ka hona chahiye');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
-      // Step 1: Sign up with Supabase Auth (with email verification)
-      const { data: { user }, error: signUpError } = await supabase.auth.signUp({
+      // Call Supabase sign up
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth`, // Redirect after email verification
-          data: {
-            username: username,
-          }
-        },
       });
 
-      if (signUpError) {
-        throw signUpError;
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
       }
 
-      if (!user) {
-        throw new Error('User creation failed');
+      if (!data.user) {
+        setError('User creation failed');
+        setLoading(false);
+        return;
       }
 
-      // Step 2: Create profile in "profiles" table using upsert
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          display_name: username,
-          email: user.email,
-          photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-          coins: 5000,
-        });
+      // Insert into profiles table with error handling
+      const { error: profileError } = await supabase.from('profiles').insert({
+        id: data.user.id,
+        display_name: username,
+        email: data.user.email,
+        photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        coins: 5000,
+        win_rate: 0,
+        streak: 0,
+      });
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
+        console.error('Profile insert error:', profileError);
+        setError('Profile create failed: ' + profileError.message);
+        setLoading(false);
+        return;
       }
 
-      // Success! Show message and clear form
-      setError(null);
-      setEmail('');
-      setPassword('');
-      setUsername('');
+      setError('Account ban gaya! Ab login karo.');
+      setIsLogin(true);
       setLoading(false);
-      alert('✅ Account created!\n\n📧 Check your email for the verification link.\n\nClick the link to confirm your account, then login!');
-      setIsLogin(true); // Switch to login tab
     } catch (err: any) {
       console.error('Signup error:', err);
-      setError(err.message || 'Failed to sign up. Please try again.');
+      setError(err.message || 'Signup failed');
       setLoading(false);
     }
   };
 
   const handleEmailLogin = async () => {
     // Validation
-    if (!email.trim() || !password.trim()) {
-      setError('Please fill in email and password');
+    if (!email.trim()) {
+      setError('Email daalo');
+      return;
+    }
+
+    if (!password.trim()) {
+      setError('Password daalo');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (signInError) {
-        throw signInError;
+      if (error) {
+        setError('Email ya password galat hai');
+        setLoading(false);
+        return;
       }
 
-      // Success - onAuthStateChange will handle navigation
-      setEmail('');
-      setPassword('');
+      setLoading(false);
+      // AppContext onAuthStateChange will handle navigation automatically
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err.message?.includes('Email not confirmed')) {
-        setError('❌ Email not verified yet.\n\nCheck your email inbox for the verification link and click it.');
-      } else if (err.message?.includes('Invalid login credentials')) {
-        setError('❌ Invalid email or password');
-      } else {
-        setError(err.message || 'Failed to login. Please try again.');
-      }
+      setError('Email ya password galat hai');
       setLoading(false);
     }
   };
