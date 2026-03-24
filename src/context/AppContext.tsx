@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import type { AuthChangeEvent } from '@supabase/supabase-js';
 
 interface UserProfile {
   id: string;
@@ -19,6 +20,7 @@ interface AppContextType {
   bets: any[];
   coins: number;
   isAuthReady: boolean;
+  logout: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -29,74 +31,136 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [bets, setBets] = useState<any[]>([]);
+  const subscriptionRef = useRef<any>(null);
+  const isLoggingOutRef = useRef(false);
 
-  // Initialize auth on mount
+  // Initialize auth on mount with session restoration
   useEffect(() => {
     let isUnmounted = false;
+    let timeoutId: NodeJS.Timeout | null = null;
 
-    // Pehle onAuthStateChange set karo — phir getSession
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (isUnmounted) return;
-
-        if (session?.user) {
+    const initAuth = async () => {
+      try {
+        // Restore existing session first
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && !isUnmounted) {
           await handleUserSession(session.user);
-        } else {
-          setUser(null);
         }
-
-        // Har case mein loading false karo
-        if (!isUnmounted) {
-          setLoading(false);
-          setIsAuthReady(true);
-        }
+      } catch (error) {
+        console.error('Session restore error:', error);
       }
-    );
 
-    // Safety net — 4 second baad force loading false
-    const timer = setTimeout(() => {
+      // Set up listener for auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event: AuthChangeEvent, session) => {
+          if (isUnmounted || isLoggingOutRef.current) return;
+
+          try {
+            if (session?.user) {
+              await handleUserSession(session.user);
+            } else {
+              setUser(null);
+            }
+          } catch (error) {
+            console.error('Auth state change error:', error);
+          }
+
+          if (!isUnmounted) {
+            setLoading(false);
+            setIsAuthReady(true);
+          }
+        }
+      );
+
+      subscriptionRef.current = subscription;
+
+      // Safety timeout
       if (!isUnmounted) {
-        setLoading(false);
-        setIsAuthReady(true);
+        timeoutId = setTimeout(() => {
+          if (!isUnmounted) {
+            setLoading(false);
+            setIsAuthReady(true);
+          }
+        }, 5000);
       }
-    }, 4000);
+    };
+
+    initAuth();
 
     return () => {
       isUnmounted = true;
-      clearTimeout(timer);
-      subscription.unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
     };
   }, []);
 
-  // Handle user session - fetch profile in background
+  // Handle user session with retry logic for resilience
   const handleUserSession = async (authUser: any) => {
-    try {
-      // Fetch user profile from Supabase
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+    const maxRetries = 2;
+    let retries = 0;
 
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.warn('Profile fetch warning:', profileError.message);
-      }
+    const fetchProfile = async (): Promise<void> => {
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
 
-      if (profile) {
-        // Profile exists, use it
-        const userProfile: UserProfile = {
-          id: profile.id,
-          displayName: profile.display_name || authUser.user_metadata?.full_name || 'User',
-          email: profile.email,
-          photoURL: profile.photo_url || authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}`,
-          coins: profile.coins || 5000,
-          winRate: profile.win_rate || 0,
-          streak: profile.streak || 0,
-        };
-        setUser(userProfile);
-      } else {
-        // New user - show with default values
-        const newProfile: UserProfile = {
+        if (profileError && profileError.code !== 'PGRST116') {
+          if (retries < maxRetries) {
+            retries++;
+            console.warn(`Profile fetch retry ${retries}/${maxRetries}`);
+            await new Promise(r => setTimeout(r, 1000));
+            return fetchProfile();
+          }
+          console.error('Profile fetch failed:', profileError.message);
+        }
+
+        if (profile) {
+          const userProfile: UserProfile = {
+            id: profile.id,
+            displayName: profile.display_name || authUser.user_metadata?.full_name || 'User',
+            email: profile.email,
+            photoURL: profile.photo_url || authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}`,
+            coins: profile.coins || 5000,
+            winRate: profile.win_rate || 0,
+            streak: profile.streak || 0,
+          };
+          setUser(userProfile);
+        } else {
+          // New user
+          const newProfile: UserProfile = {
+            id: authUser.id,
+            displayName: authUser.user_metadata?.full_name || 'User',
+            email: authUser.email || '',
+            photoURL: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}`,
+            coins: 5000,
+            winRate: 0,
+            streak: 0,
+          };
+          setUser(newProfile);
+
+          // Create profile in background
+          supabase.from('profiles').upsert({
+            id: authUser.id,
+            display_name: newProfile.displayName,
+            email: newProfile.email,
+            photo_url: newProfile.photoURL,
+            coins: newProfile.coins,
+            win_rate: newProfile.winRate,
+            streak: newProfile.streak,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).match(err => console.error('Profile creation failed:', err));
+        }
+      } catch (error) {
+        console.error('Error handling user session:', error);
+        // Fallback profile
+        setUser({
           id: authUser.id,
           displayName: authUser.user_metadata?.full_name || 'User',
           email: authUser.email || '',
@@ -104,36 +168,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           coins: 5000,
           winRate: 0,
           streak: 0,
-        };
-        setUser(newProfile);
-
-        // Create profile in background
-        await supabase.from('profiles').upsert({
-          id: authUser.id,
-          display_name: newProfile.displayName,
-          email: newProfile.email,
-          photo_url: newProfile.photoURL,
-          coins: newProfile.coins,
-          win_rate: newProfile.winRate,
-          streak: newProfile.streak,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         });
       }
-    } catch (error) {
-      console.error('Error handling user session:', error);
-      // Fallback user profile
-      const fallbackProfile: UserProfile = {
-        id: authUser.id,
-        displayName: authUser.user_metadata?.full_name || 'User',
-        email: authUser.email || '',
-        photoURL: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}`,
-        coins: 5000,
-        winRate: 0,
-        streak: 0,
-      };
-      setUser(fallbackProfile);
-    }
+    };
+
+    await fetchProfile();
   };
 
   // Real-time listeners for rooms and bets if user is logged in
@@ -148,8 +187,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     //   .subscribe();
   }, [user]);
 
+  // Logout function with proper lifecycle cleanup
+  const logout = async () => {
+    try {
+      isLoggingOutRef.current = true;
+      setLoading(true);
+
+      // Unsubscribe from listener
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+
+      // Clear auth and state
+      await supabase.auth.signOut();
+      setUser(null);
+      setRooms([]);
+      setBets([]);
+
+      // Clean all storage keys
+      const keysToRemove = ['roomblast-auth', 'roomblast-auth-v2', 'supabase.auth.token'];
+      keysToRemove.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        } catch (e) {
+          // Storage might be read-only
+        }
+      });
+
+      setLoading(false);
+      isLoggingOutRef.current = false;
+    } catch (error) {
+      console.error('Logout error:', error);
+      setUser(null);
+      setLoading(false);
+      isLoggingOutRef.current = false;
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ user, loading, rooms, bets, coins: user?.coins || 0, isAuthReady }}>
+    <AppContext.Provider value={{ user, loading, rooms, bets, coins: user?.coins || 0, isAuthReady, logout }}>
       {children}
     </AppContext.Provider>
   );

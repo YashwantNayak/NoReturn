@@ -6,14 +6,13 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 
 const Profile: React.FC = () => {
-  const { user } = useAppContext();
+  const { user, logout } = useAppContext();
   const navigate = useNavigate();
 
   if (!user) return null;
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/auth');
+    await logout();
   };
 
   const statCardStyle: React.CSSProperties = {
