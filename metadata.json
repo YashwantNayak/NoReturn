@@ -1,0 +1,5 @@
+{
+  "name": "RoomBlast Web",
+  "description": "Real-time IPL 2026 fun prediction web app where users create private rooms and play prediction games with friends using virtual coins.",
+  "requestFramePermissions": []
+}
