@@ -1,203 +1,501 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Send, ArrowLeft, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Users } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
-interface ChatMessage {
+interface Message {
   id: string;
-  user: string;
-  message: string;
-  timestamp: Date;
-  avatar: string;
+  user_id: string;
+  display_name: string;
+  photo_url: string;
+  content: string;
+  created_at: string;
+  room_id?: string;
 }
+
+// Memoized Message Component for performance
+const MessageBubble = React.memo(({ 
+  msg, 
+  isMe, 
+  userPhoto 
+}: { 
+  msg: Message; 
+  isMe: boolean; 
+  userPhoto?: string;
+}) => {
+  const timeStr = useMemo(() => {
+    return new Date(msg.created_at).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [msg.created_at]);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: isMe ? 'flex-end' : 'flex-start',
+        gap: '8px',
+        alignItems: 'flex-end',
+      }}
+    >
+      {!isMe && (
+        <img
+          src={
+            msg.photo_url ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.display_name}`
+          }
+          width={32}
+          height={32}
+          style={{ borderRadius: '50%', flexShrink: 0 }}
+          alt={msg.display_name}
+          loading="lazy"
+        />
+      )}
+
+      <div style={{ maxWidth: '65%' }}>
+        {!isMe && (
+          <p
+            style={{
+              margin: '0 0 4px 4px',
+              fontSize: '11px',
+              color: '#00FFB2',
+              fontWeight: 'bold',
+            }}
+          >
+            {msg.display_name}
+          </p>
+        )}
+
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+            backgroundColor: isMe ? '#00FFB2' : '#1a1a1a',
+            color: isMe ? '#000000' : '#FFFFFF',
+            fontSize: '14px',
+            border: isMe ? 'none' : '1px solid rgba(255,255,255,0.1)',
+            wordWrap: 'break-word',
+          }}
+        >
+          {msg.content}
+        </div>
+
+        <p
+          style={{
+            margin: '3px 4px 0',
+            fontSize: '10px',
+            color: 'rgba(255,255,255,0.3)',
+            textAlign: isMe ? 'right' : 'left',
+          }}
+        >
+          {timeStr}
+        </p>
+      </div>
+
+      {isMe && (
+        <img
+          src={
+            userPhoto ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=user`
+          }
+          width={32}
+          height={32}
+          style={{ borderRadius: '50%', flexShrink: 0 }}
+          alt="You"
+          loading="lazy"
+        />
+      )}
+    </div>
+  );
+});
+
+MessageBubble.displayName = 'MessageBubble';
 
 const FullPageChat: React.FC = () => {
   const { user } = useAppContext();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', user: 'Player1', message: 'Great shot! 🔥', timestamp: new Date(), avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=player1' },
-    { id: '2', user: 'Player2', message: 'CSK will win today!', timestamp: new Date(), avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=player2' },
-  ]);
+  const { roomId } = useParams<{ roomId?: string }>();
+  
+  // Default to 'messages' table for global chat
+  const currentRoomId = roomId || 'global';
+  
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScroll = useRef(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Check if user is scrolled near bottom
+  const handleScroll = useCallback(() => {
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollHeight, scrollTop, clientHeight } = messagesContainerRef.current;
+    shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 100;
+  }, []);
 
+  // Smart auto-scroll - only scroll if user is at bottom
   useEffect(() => {
-    scrollToBottom();
+    if (!shouldAutoScroll.current || !bottomRef.current) return;
+    
+    // Use requestAnimationFrame for smooth scrolling
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    });
   }, [messages]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !user) return;
-    
-    const message: ChatMessage = {
-      id: Date.now().toString(),
-      user: user.displayName,
-      message: newMessage,
-      timestamp: new Date(),
-      avatar: user.photoURL,
+  // Load messages + setup real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    const loadMessages = async () => {
+      try {
+        setError(null);
+        // Optimized query - select only needed columns
+        const { data, error: fetchError } = await supabase
+          .from('messages')
+          .select('id, user_id, display_name, photo_url, content, created_at')
+          .order('created_at', { ascending: true })
+          .limit(50);
+
+        if (fetchError) throw fetchError;
+
+        setMessages(data || []);
+        shouldAutoScroll.current = true;
+      } catch (err: any) {
+        console.error('Failed to load messages:', err);
+        setError('Could not load messages');
+      } finally {
+        setLoading(false);
+      }
     };
-    
-    setMessages([...messages, message]);
-    setNewMessage('');
-  };
+
+    loadMessages();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('global-chat')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Optimized message send with debounce
+  const handleSend = useCallback(async () => {
+    if (!newMessage.trim() || !user || isSending) return;
+
+    try {
+      setIsSending(true);
+      setError(null);
+      
+      const { error } = await supabase.from('messages').insert({
+        user_id: user.id,
+        display_name: user.displayName,
+        photo_url: user.photoURL,
+        content: newMessage.trim(),
+      });
+
+      if (error) throw error;
+
+      setNewMessage('');
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      setError('Failed to send message');
+    } finally {
+      setIsSending(false);
+    }
+  }, [newMessage, user, isSending]);
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: '100%',
-      height: '100vh',
-      backgroundColor: '#000000',
-      color: '#FFFFFF',
-      padding: 0,
-      margin: 0,
-      zIndex: 9999,
-    }}>
-      {/* Chat Header - Minimal */}
-      <div style={{
-        padding: '12px 16px',
-        backgroundColor: '#111111',
-        borderBottom: '1px solid rgba(0, 255, 178, 0.3)',
+    <div
+      style={{
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '12px',
-      }}>
+        flexDirection: 'column',
+        width: '100%',
+        height: '100vh',
+        backgroundColor: '#000000',
+        color: '#FFFFFF',
+        overflow: 'hidden',
+      }}
+    >
+      {/* HEADER — Fixed at Top */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          padding: '12px 16px',
+          borderBottom: '1px solid rgba(0, 255, 178, 0.3)',
+          backgroundColor: '#111111',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          height: '60px',
+        }}
+      >
+        {/* 1. Back Icon Only */}
         <button
-          onClick={() => navigate('/global-room')}
+          onClick={() => navigate(-1)}
           style={{
             background: 'none',
             border: 'none',
             color: '#00FFB2',
             cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold',
+            fontSize: '20px',
             padding: '4px 8px',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            justifyContent: 'center',
+            minWidth: '40px',
           }}
         >
-          <ArrowLeft size={20} /> Back
+          <ArrowLeft size={24} />
         </button>
 
+        {/* 2. Match Score in Middle */}
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', color: '#00FFB2' }}>MI 145/8 vs CSK</p>
-          <p style={{ fontSize: '11px', color: 'rgba(0, 255, 178, 0.6)', margin: '2px 0 0 0' }}>18.3 Overs</p>
+          <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#00FFB2' }}>
+            MI 145/8 vs CSK
+          </p>
+          <p style={{ margin: '2px 0 0 0', fontSize: '10px', color: 'rgba(0, 255, 178, 0.6)' }}>
+            18.3 Overs
+          </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'rgba(0, 255, 178, 0.8)' }}>
+        {/* 3. Live Member Count */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '12px',
+            color: 'rgba(0, 255, 178, 0.8)',
+            minWidth: '40px',
+            justifyContent: 'flex-end',
+          }}
+        >
           <Users size={16} />
-          <span>2.3K</span>
+          <span>{messages.length}</span>
         </div>
       </div>
 
-      {/* Messages Container - Full Height Scrollable */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-      }}>
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            style={{
-              display: 'flex',
-              flexDirection: msg.user === user?.displayName ? 'row-reverse' : 'row',
-              gap: '10px',
-              alignItems: 'flex-start',
-            }}
-          >
-            <img
-              src={msg.avatar}
-              width="36"
-              height="36"
-              style={{ borderRadius: '50%', flexShrink: 0 }}
-              alt={msg.user}
-            />
-            <div style={{ maxWidth: '75%' }}>
-              {msg.user !== user?.displayName && (
-                <p style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '4px', opacity: 0.6, margin: 0 }}>
-                  {msg.user}
-                </p>
-              )}
+      {/* MESSAGES CONTAINER — Scrollable Middle Section */}
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          paddingTop: '60px',
+          paddingBottom: '120px',
+          paddingLeft: '16px',
+          paddingRight: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          WebkitOverflowScrolling: 'touch',
+          scrollBehavior: 'smooth',
+        }}
+      >
+        {loading ? (
+          // Smart skeleton loaders instead of blocking
+          <>
+            {[1, 2, 3, 4, 5].map((i) => (
               <div
+                key={`skeleton-${i}`}
                 style={{
-                  padding: '10px 14px',
-                  borderRadius: '12px',
-                  backgroundColor: msg.user === user?.displayName ? '#00FFB2' : 'rgba(255, 255, 255, 0.08)',
-                  color: msg.user === user?.displayName ? '#000000' : '#FFFFFF',
-                  wordWrap: 'break-word',
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'flex-end',
+                  animation: 'pulse 1.5s ease-in-out infinite',
                 }}
               >
-                <p style={{ fontSize: '14px', margin: 0, lineHeight: '1.4' }}>{msg.message}</p>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ maxWidth: '65%' }}>
+                  <div
+                    style={{
+                      width: '100px',
+                      height: '12px',
+                      backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                      borderRadius: '4px',
+                      marginBottom: '8px',
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: '200px',
+                      height: '32px',
+                      backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                      borderRadius: '16px',
+                    }}
+                  />
+                </div>
               </div>
-            </div>
+            ))}
+          </>
+        ) : messages.length === 0 && !error ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '200px',
+              color: 'rgba(255, 255, 255, 0.4)',
+            }}
+          >
+            No messages yet. Start the conversation!
           </div>
-        ))}
-        <div ref={messagesEndRef} />
+        ) : (
+          messages.map((msg) => {
+            const isMe = msg.user_id === user?.id;
+            return (
+              <MessageBubble
+                key={msg.id}
+                msg={msg}
+                isMe={isMe}
+                userPhoto={user?.photoURL}
+              />
+            );
+          })
+        )}
+        <div ref={bottomRef} style={{ height: '0' }} />
       </div>
 
-      {/* Message Input - Fixed Bottom */}
-      <form
-        onSubmit={handleSendMessage}
+      {/* Error Display */}
+      {error && (
+        <div
+          style={{
+            padding: '12px 16px',
+            backgroundColor: 'rgba(255, 68, 68, 0.1)',
+            borderTop: '1px solid rgba(255, 68, 68, 0.3)',
+            color: '#FF6B6B',
+            fontSize: '12px',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {/* INPUT AREA — Fixed at Bottom */}
+      <div
         style={{
-          padding: '14px 16px',
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          padding: '12px 16px 16px',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
           backgroundColor: '#111111',
-          borderTop: '1px solid rgba(0, 255, 178, 0.2)',
           display: 'flex',
           gap: '10px',
-          alignItems: 'flex-end',
+          alignItems: 'center',
+          height: '70px',
+          boxSizing: 'border-box',
         }}
       >
         <input
           type="text"
-          placeholder="Type message..."
           style={{
             flex: 1,
             padding: '12px 16px',
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(0, 255, 178, 0.2)',
-            borderRadius: '20px',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '24px',
             color: '#FFFFFF',
-            outline: 'none',
             fontSize: '14px',
+            outline: 'none',
+            WebkitAppearance: 'none',
+            height: '44px',
+            boxSizing: 'border-box',
           }}
+          placeholder="Message likho..."
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !isSending) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          maxLength={500}
+          disabled={!user || isSending}
+          autoComplete="off"
+          spellCheck="true"
         />
         <button
-          type="submit"
+          onClick={handleSend}
+          disabled={!newMessage.trim() || isSending}
           style={{
-            width: '40px',
-            height: '40px',
+            width: '44px',
+            height: '44px',
             borderRadius: '50%',
-            backgroundColor: '#00FFB2',
+            backgroundColor:
+              newMessage.trim() && !isSending
+                ? '#00FFB2'
+                : 'rgba(255,255,255,0.1)',
             border: 'none',
-            color: '#000000',
+            cursor:
+              newMessage.trim() && !isSending ? 'pointer' : 'not-allowed',
+            fontSize: '20px',
+            flexShrink: 0,
             fontWeight: 'bold',
-            cursor: 'pointer',
+            transition: 'background-color 0.2s',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flexShrink: 0,
+            WebkitAppearance: 'none',
+            opacity: isSending ? 0.6 : 1,
           }}
         >
-          <Send size={18} />
+          {isSending ? '...' : '➤'}
         </button>
-      </form>
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
+        }
+        
+        @media (max-width: 768px) {
+          input:focus, textarea:focus {
+            font-size: 16px;
+          }
+        }
+      `}</style>
     </div>
   );
 };

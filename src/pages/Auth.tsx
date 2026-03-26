@@ -15,6 +15,7 @@ const Auth: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAppContext();
   const loginInProgress = React.useRef(false);
+  const signupInProgress = React.useRef(false);
 
   useEffect(() => {
     if (user) {
@@ -22,9 +23,20 @@ const Auth: React.FC = () => {
     }
   }, [user, navigate]);
 
+  // Reset form when toggling between login/signup
+  const toggleMode = () => {
+    setIsLogin(!isLogin);
+    setError(null);
+    setEmail('');
+    setPassword('');
+    setUsername('');
+    setLoading(false);
+    loginInProgress.current = false;
+    signupInProgress.current = false;
+  };
+
   const handleGoogleLogin = async () => {
     if (loading || loginInProgress.current) {
-      console.warn('Login already in progress, ignoring request');
       return;
     }
     
@@ -33,7 +45,6 @@ const Auth: React.FC = () => {
     setError(null);
     
     try {
-      console.log('Initiating Google login...');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -44,101 +55,106 @@ const Auth: React.FC = () => {
       if (error) {
         throw error;
       }
-      // On success, Supabase will redirect and auth state listener will handle it
     } catch (err: any) {
-      console.error('Login failed with error:', err);
+      console.error('Google login error:', err);
       loginInProgress.current = false;
       setLoading(false);
       
+      let errorMsg = 'Google login failed';
       if (err.message?.includes('popup')) {
-        setError('Login popup was blocked by your browser. Please allow popups for this site.');
-      } else if (err.message?.includes('network') || !navigator.onLine) {
-        setError('Network error: Please check your internet connection.');
-      } else {
-        setError(err.message || 'Failed to login with Google. Please try again.');
+        errorMsg = 'Please allow popups for this site';
+      } else if (!navigator.onLine) {
+        errorMsg = 'Please check your internet connection';
       }
+      setError(errorMsg);
     }
   };
 
   const handleEmailSignup = async () => {
+    // Prevent concurrent requests
+    if (loading || signupInProgress.current) {
+      return;
+    }
+
     // Validation
     if (!username.trim()) {
-      setError('Naam daalo');
+      setError('Username is required');
       return;
     }
 
     if (!email.trim()) {
-      setError('Email daalo');
+      setError('Email is required');
       return;
     }
 
     if (password.length < 6) {
-      setError('Password kam se kam 6 characters ka hona chahiye');
+      setError('Password must be at least 6 characters');
       return;
     }
 
+    signupInProgress.current = true;
     setLoading(true);
+    setError(null);
 
     try {
-      // Call Supabase sign up
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: username,
+            avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+          },
+        },
       });
 
       if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
+        throw error;
       }
 
       if (!data.user) {
-        setError('User creation failed');
-        setLoading(false);
-        return;
+        throw new Error('User creation failed');
       }
 
-      // Insert into profiles table with error handling
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        display_name: username,
-        email: data.user.email,
-        photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-        coins: 5000,
-        win_rate: 0,
-        streak: 0,
-      });
-
-      if (profileError) {
-        console.error('Profile insert error:', profileError);
-        setError('Profile create failed: ' + profileError.message);
-        setLoading(false);
-        return;
-      }
-
-      setError('Account ban gaya! Ab login karo.');
+      // Success - prompt email verification
       setIsLogin(true);
+      setError('Account created! Please verify your email and log in.');
+      setEmail('');
+      setPassword('');
+      setUsername('');
       setLoading(false);
     } catch (err: any) {
       console.error('Signup error:', err);
-      setError(err.message || 'Signup failed');
+      
+      // Show actual error from Supabase
+      const errorMsg = err.message || 'Signup failed. Please try again.';
+      setError(errorMsg);
       setLoading(false);
+    } finally {
+      signupInProgress.current = false;
     }
   };
 
   const handleEmailLogin = async () => {
+    // Prevent concurrent requests
+    if (loading || loginInProgress.current) {
+      return;
+    }
+
     // Validation
     if (!email.trim()) {
-      setError('Email daalo');
+      setError('Email is required');
       return;
     }
 
     if (!password.trim()) {
-      setError('Password daalo');
+      setError('Password is required');
       return;
     }
 
+    loginInProgress.current = true;
     setLoading(true);
+    setError(null);
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -147,17 +163,17 @@ const Auth: React.FC = () => {
       });
 
       if (error) {
-        setError('Email ya password galat hai');
-        setLoading(false);
-        return;
+        throw error;
       }
 
       setLoading(false);
       // AppContext onAuthStateChange will handle navigation automatically
     } catch (err: any) {
       console.error('Login error:', err);
-      setError('Email ya password galat hai');
+      setError('Invalid email or password');
       setLoading(false);
+    } finally {
+      loginInProgress.current = false;
     }
   };
 
@@ -319,7 +335,7 @@ const Auth: React.FC = () => {
         <p style={{ marginTop: '24px', color: 'rgba(255, 255, 255, 0.6)', fontSize: '14px' }}>
           {isLogin ? "Don't have an account? " : "Already have an account? "}
           <span 
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={toggleMode}
             style={{ color: '#00FFB2', cursor: 'pointer', fontWeight: 'bold' }}
           >
             {isLogin ? 'Register' : 'Login'}

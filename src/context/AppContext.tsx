@@ -132,7 +132,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           };
           setUser(userProfile);
         } else {
-          // New user
+          // New user - profile should be created by database trigger
+          // But add as fallback in case trigger hasn't fired yet
           const newProfile: UserProfile = {
             id: authUser.id,
             displayName: authUser.user_metadata?.full_name || 'User',
@@ -144,18 +145,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           };
           setUser(newProfile);
 
-          // Create profile in background
-          supabase.from('profiles').upsert({
-            id: authUser.id,
-            display_name: newProfile.displayName,
-            email: newProfile.email,
-            photo_url: newProfile.photoURL,
-            coins: newProfile.coins,
-            win_rate: newProfile.winRate,
-            streak: newProfile.streak,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }).match(err => console.error('Profile creation failed:', err));
+          // Ensure profile exists (idempotent - won't duplicate)
+          try {
+            const { error: upsertError } = await supabase.from('profiles').upsert(
+              {
+                id: authUser.id,
+                display_name: newProfile.displayName,
+                email: newProfile.email,
+                photo_url: newProfile.photoURL,
+                coins: newProfile.coins,
+                win_rate: newProfile.winRate,
+                streak: newProfile.streak,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+
+            if (upsertError) {
+              console.warn('Profile upsert warning:', upsertError);
+              // Not critical - trigger should have created it
+            }
+          } catch (err) {
+            console.error('Profile upsert error:', err);
+            // Fallback already set above
+          }
         }
       } catch (error) {
         console.error('Error handling user session:', error);

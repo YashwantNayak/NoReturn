@@ -68,6 +68,7 @@ const AppContent: React.FC = () => {
         <Route path="/auth" element={<Navigate to="/" />} />
         <Route path="/" element={<Home />} />
         <Route path="/global-room" element={<GlobalRoom />} />
+        <Route path="/chat/:roomId" element={<FullPageChat />} />
         <Route path="/chat" element={<FullPageChat />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/profile" element={<Profile />} />
