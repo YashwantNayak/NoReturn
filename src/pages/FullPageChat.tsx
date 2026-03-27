@@ -139,13 +139,15 @@ const MessageBubble = React.memo(({
     );
   }
 
-  // My messages (from current user) - FIRST message (no avatar needed)
+  // My messages (from current user) - FIRST message shows avatar
   if (isMe && shouldShowUserInfo) {
     return (
       <div
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
+          gap: '6px',
+          alignItems: 'flex-end',
           marginBottom: '-10px',
         }}
       >
@@ -175,6 +177,18 @@ const MessageBubble = React.memo(({
             {timeStr}
           </p> */}
         </div>
+
+        <img
+          src={
+            userPhoto ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=user`
+          }
+          width={28}
+          height={28}
+          style={{ borderRadius: '50%', flexShrink: 0 }}
+          alt="You"
+          loading="lazy"
+        />
       </div>
     );
   }
@@ -186,7 +200,7 @@ const MessageBubble = React.memo(({
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          marginRight: '0px',
+          marginRight: '35px',
           marginBottom: '-10px',
         }}
       >
@@ -658,10 +672,11 @@ const FullPageChat: React.FC = () => {
           maxLength={500}
           disabled={!user || isSending}
           autoComplete="off"
-          spellCheck="true"
+          spellCheck="false"
+          autoCorrect="off"
+          autoCapitalize="off"
           onFocus={(e) => {
             e.target.style.borderColor = '#009367';
-            // e.target.style.boxShadow = '0 0 8px rgba(0, 255, 178, 0.3)';
           }}
           onBlur={(e) => {
             e.target.style.borderColor = 'rgba(255,255,255,0.1)';
@@ -704,6 +719,32 @@ const FullPageChat: React.FC = () => {
           }
           50% {
             opacity: 0.5;
+          }
+        }
+        
+        /* Hide browser/mobile keyboard suggestions and autocomplete icons */
+        input::-webkit-autofill,
+        input::-webkit-contacts-auto-fill-button {
+          display: none !important;
+        }
+        
+        /* Disable autocomplete suggestions dropdown */
+        input::placeholder {
+          opacity: 1 !important;
+          color: rgba(255, 255, 255, 0.4) !important;
+        }
+        
+        /* Hide datalist suggestions */
+        datalist {
+          display: none;
+        }
+        
+        /* For mobile - hide keyboard suggestions */
+        @supports (appearance: none) {
+          input {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
           }
         }
         
