@@ -40,7 +40,7 @@ const MessageBubble = React.memo(({
         style={{
           display: 'flex',
           justifyContent: 'flex-start',
-          gap: '7px',
+          gap: '6px',
           alignItems: 'flex-end',
           marginBottom: '-9px',
         }}
@@ -72,7 +72,7 @@ const MessageBubble = React.memo(({
           <div
             style={{
               padding: '8px 14px',
-              borderRadius: '15px 15px 15px 3px',
+              borderRadius: '10px 10px 10px 1px',
               backgroundColor: '#1a1a1a',
               color: '#FFFFFF',
               fontSize: '16px',
@@ -113,7 +113,7 @@ const MessageBubble = React.memo(({
           <div
             style={{
               padding: '8px 12px',
-              borderRadius: '3px 15px 15px 15px',
+              borderRadius: '1px 10px 10px 10px',
               backgroundColor: '#1a1a1a',
               color: '#FFFFFF',
               fontSize: '16px',
@@ -139,15 +139,13 @@ const MessageBubble = React.memo(({
     );
   }
 
-  // My messages (from current user) - FIRST message shows avatar
+  // My messages (from current user) - FIRST message (no avatar needed)
   if (isMe && shouldShowUserInfo) {
     return (
       <div
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          gap: '8px',
-          alignItems: 'flex-end',
           marginBottom: '-10px',
         }}
       >
@@ -155,10 +153,10 @@ const MessageBubble = React.memo(({
           <div
             style={{
               padding: '10px 14px',
-              borderRadius: '15px 15px 3px 15px',
+              borderRadius: '10px 10px 1px 10px',
               backgroundColor: '#00FFB2',
               color: '#000000',
-              fontSize: '18px',
+              fontSize: '16px',
               border: 'none',
               wordWrap: 'break-word',
             }}
@@ -177,18 +175,6 @@ const MessageBubble = React.memo(({
             {timeStr}
           </p> */}
         </div>
-
-        <img
-          src={
-            userPhoto ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=user`
-          }
-          width={28}
-          height={28}
-          style={{ borderRadius: '50%', flexShrink: 0 }}
-          alt="You"
-          loading="lazy"
-        />
       </div>
     );
   }
@@ -200,7 +186,7 @@ const MessageBubble = React.memo(({
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          marginRight: '35px',
+          marginRight: '0px',
           marginBottom: '-10px',
         }}
       >
@@ -208,10 +194,10 @@ const MessageBubble = React.memo(({
           <div
             style={{
               padding: '8px 12px',
-              borderRadius: '15px 3px 15px 15px',
+              borderRadius: '10px 1px 10px 10px',
               backgroundColor: '#00FFB2',
               color: '#000000',
-              fontSize: '18px',
+              fontSize: '16px',
               border: 'none',
               wordWrap: 'break-word',
             }}
@@ -388,7 +374,8 @@ const FullPageChat: React.FC = () => {
 
   // Optimized message send with debounce
   const handleSend = useCallback(async () => {
-    if (!newMessage.trim() || !user || isSending) return;
+    // Check current state - don't include isSending in deps!
+    if (!newMessage.trim() || !user) return;
 
     try {
       setIsSending(true);
@@ -421,17 +408,22 @@ const FullPageChat: React.FC = () => {
 
       console.log('[Chat] Message sent successfully!');
       setNewMessage('');
-      // Auto-focus input for continuous typing
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 0);
     } catch (err: any) {
       console.error('[Chat] Failed to send message:', err.message || err);
       setError(err.message || 'Failed to send message');
     } finally {
       setIsSending(false);
+      // Focus with multiple attempts to ensure it works
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+      // Backup focus for reliability
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
-  }, [newMessage, user, isSending, currentRoomId]);
+  }, [newMessage, user, currentRoomId]);
 
   return (
     <div
@@ -645,15 +637,16 @@ const FullPageChat: React.FC = () => {
             padding: '12px 16px',
             backgroundColor: 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '24px',
+            borderRadius: '15px',
             color: '#FFFFFF',
-            fontSize: '14px',
-            outline: 'none',
+            fontSize: '16px',
+            outline: '2px solid transparent',
             WebkitAppearance: 'none',
             height: '44px',
             boxSizing: 'border-box',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
           }}
-          placeholder="Message likho..."
+          placeholder="Type your message..."
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -666,6 +659,14 @@ const FullPageChat: React.FC = () => {
           disabled={!user || isSending}
           autoComplete="off"
           spellCheck="true"
+          onFocus={(e) => {
+            e.target.style.borderColor = '#009367';
+            // e.target.style.boxShadow = '0 0 8px rgba(0, 255, 178, 0.3)';
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+            e.target.style.boxShadow = 'none';
+          }}
         />
         <button
           onClick={handleSend}
@@ -676,7 +677,7 @@ const FullPageChat: React.FC = () => {
             borderRadius: '50%',
             backgroundColor:
               newMessage.trim() && !isSending
-                ? '#00FFB2'
+                ? '#007e59'
                 : 'rgba(255,255,255,0.1)',
             border: 'none',
             cursor:
