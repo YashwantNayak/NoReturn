@@ -140,12 +140,12 @@ const Leaderboard: React.FC = () => {
                           borderRadius: '50%',
                           border: `2px solid ${colors.accent}`,
                           marginBottom: '8px',
-                          marginLeft: '12px',
+                          marginLeft: '1px',
                           objectFit: 'cover',
                         }}
                         alt={top3[1].displayName}
                       />
-                      <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[1].displayName}
                       </p>
                       <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
@@ -195,8 +195,8 @@ const Leaderboard: React.FC = () => {
                       }}
                       alt={top3[0].displayName}
                     />
-                    <Crown size={24} color="#FFD700" fill="#FFD700" style={{ marginBottom: '4px' }} />
-                    <p style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', color: '#FFD700' }}>
+                    <Crown size={20} color="#FFD700" fill="#FFD700" style={{ marginBottom: '4px' }} />
+                    <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFD700' }}>
                       {top3[0].displayName}
                     </p>
                     <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
@@ -242,12 +242,12 @@ const Leaderboard: React.FC = () => {
                           borderRadius: '50%',
                           border: '2px solid #CD7F32',
                           marginBottom: '8px',
-                          marginLeft: '10px',
+                          marginLeft: '1px',
                           objectFit: 'cover',
                         }}
                         alt={top3[2].displayName}
                       />
-                      <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[2].displayName}
                       </p>
                       <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
