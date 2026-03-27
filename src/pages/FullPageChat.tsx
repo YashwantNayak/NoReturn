@@ -18,11 +18,13 @@ interface Message {
 const MessageBubble = React.memo(({ 
   msg, 
   isMe, 
-  userPhoto 
+  userPhoto,
+  shouldShowUserInfo = true
 }: { 
   msg: Message; 
   isMe: boolean; 
   userPhoto?: string;
+  shouldShowUserInfo?: boolean;
 }) => {
   const timeStr = useMemo(() => {
     return new Date(msg.created_at).toLocaleTimeString([], {
@@ -31,34 +33,34 @@ const MessageBubble = React.memo(({
     });
   }, [msg.created_at]);
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: isMe ? 'flex-end' : 'flex-start',
-        gap: '8px',
-        alignItems: 'flex-end',
-      }}
-    >
-      {!isMe && (
+  // If showing user info (first message from user)
+  if (!isMe && shouldShowUserInfo) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-start',
+          gap: '7px',
+          alignItems: 'flex-end',
+          marginBottom: '-9px',
+        }}
+      >
         <img
           src={
             msg.photo_url ||
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.display_name}`
           }
-          width={32}
-          height={32}
+          width={28}
+          height={28}
           style={{ borderRadius: '50%', flexShrink: 0 }}
           alt={msg.display_name}
           loading="lazy"
         />
-      )}
 
-      <div style={{ maxWidth: '65%' }}>
-        {!isMe && (
+        <div style={{ maxWidth: '65%' }}>
           <p
             style={{
-              margin: '0 0 4px 4px',
+              margin: '0 0 1px 4px',
               fontSize: '11px',
               color: '#00FFB2',
               fontWeight: 'bold',
@@ -66,49 +68,174 @@ const MessageBubble = React.memo(({
           >
             {msg.display_name}
           </p>
-        )}
 
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-            backgroundColor: isMe ? '#00FFB2' : '#1a1a1a',
-            color: isMe ? '#000000' : '#FFFFFF',
-            fontSize: '14px',
-            border: isMe ? 'none' : '1px solid rgba(255,255,255,0.1)',
-            wordWrap: 'break-word',
-          }}
-        >
-          {msg.content}
+          <div
+            style={{
+              padding: '8px 14px',
+              borderRadius: '15px 15px 15px 3px',
+              backgroundColor: '#1a1a1a',
+              color: '#FFFFFF',
+              fontSize: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              wordWrap: 'break-word',
+            }}
+          >
+            {msg.content}
+          </div>
+
+          {/* <p
+            style={{
+              margin: '3px 4px 0',
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.3)',
+              textAlign: 'left',
+            }}
+          >
+            {timeStr}
+          </p> */}
+        </div>
+      </div>
+    );
+  }
+
+  // If NOT showing user info (subsequent message from same user)
+  if (!isMe && !shouldShowUserInfo) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-start',
+          marginLeft: '35px',
+          marginBottom: '-9px',
+        }}
+      >
+        <div style={{ maxWidth: '65%' }}>
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '3px 15px 15px 15px',
+              backgroundColor: '#1a1a1a',
+              color: '#FFFFFF',
+              fontSize: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              wordWrap: 'break-word',
+            }}
+          >
+            {msg.content}
+          </div>
+
+          {/* <p
+            style={{
+              margin: '2px 4px 0',
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.3)',
+              textAlign: 'left',
+            }}
+          >
+            {timeStr}
+          </p> */}
+        </div>
+      </div>
+    );
+  }
+
+  // My messages (from current user) - FIRST message shows avatar
+  if (isMe && shouldShowUserInfo) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '8px',
+          alignItems: 'flex-end',
+          marginBottom: '-10px',
+        }}
+      >
+        <div style={{ maxWidth: '65%' }}>
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: '15px 15px 3px 15px',
+              backgroundColor: '#00FFB2',
+              color: '#000000',
+              fontSize: '18px',
+              border: 'none',
+              wordWrap: 'break-word',
+            }}
+          >
+            {msg.content}
+          </div>
+
+          {/* <p
+            style={{
+              margin: '3px 4px 0',
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.3)',
+              textAlign: 'right',
+            }}
+          >
+            {timeStr}
+          </p> */}
         </div>
 
-        <p
-          style={{
-            margin: '3px 4px 0',
-            fontSize: '10px',
-            color: 'rgba(255,255,255,0.3)',
-            textAlign: isMe ? 'right' : 'left',
-          }}
-        >
-          {timeStr}
-        </p>
-      </div>
-
-      {isMe && (
         <img
           src={
             userPhoto ||
             `https://api.dicebear.com/7.x/avataaars/svg?seed=user`
           }
-          width={32}
-          height={32}
+          width={28}
+          height={28}
           style={{ borderRadius: '50%', flexShrink: 0 }}
           alt="You"
           loading="lazy"
         />
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  // My messages (from current user) - SUBSEQUENT messages (no avatar)
+  if (isMe && !shouldShowUserInfo) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          marginRight: '35px',
+          marginBottom: '-10px',
+        }}
+      >
+        <div style={{ maxWidth: '65%' }}>
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '15px 3px 15px 15px',
+              backgroundColor: '#00FFB2',
+              color: '#000000',
+              fontSize: '18px',
+              border: 'none',
+              wordWrap: 'break-word',
+            }}
+          >
+            {msg.content}
+          </div>
+
+          {/* <p
+            style={{
+              margin: '2px 4px 0',
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.3)',
+              textAlign: 'right',
+            }}
+          >
+            {timeStr}
+          </p> */}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback (shouldn't reach here)
+  return null
 });
 
 MessageBubble.displayName = 'MessageBubble';
@@ -128,6 +255,7 @@ const FullPageChat: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const shouldAutoScroll = useRef(true);
 
   // Check if user is scrolled near bottom
@@ -152,50 +280,111 @@ const FullPageChat: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    let isActive = true;
+    let channel: any = null;
+
     const loadMessages = async () => {
       try {
         setError(null);
-        // Optimized query - select only needed columns
+        setLoading(true);
+
+        console.log(`[Chat] Loading messages for room: ${currentRoomId}`);
+
+        // Fetch existing messages
         const { data, error: fetchError } = await supabase
           .from('messages')
           .select('id, user_id, display_name, photo_url, content, created_at')
+          // .eq('room_id', currentRoomId) // Uncomment once table has room_id
           .order('created_at', { ascending: true })
-          .limit(50);
+          .limit(100);
 
-        if (fetchError) throw fetchError;
+        if (fetchError) {
+          console.error('[Chat] Fetch error:', fetchError);
+          throw fetchError;
+        }
 
-        setMessages(data || []);
-        shouldAutoScroll.current = true;
+        if (isActive) {
+          setMessages(data || []);
+          shouldAutoScroll.current = true;
+          console.log(`[Chat] Loaded ${data?.length || 0} messages`);
+        }
       } catch (err: any) {
-        console.error('Failed to load messages:', err);
-        setError('Could not load messages');
+        console.error('[Chat] Failed to load messages:', err.message || err);
+        if (isActive) {
+          setError('Could not load messages');
+        }
       } finally {
-        setLoading(false);
+        if (isActive) setLoading(false);
       }
     };
 
+    const setupRealtimeSubscription = async () => {
+      console.log(`[Chat] Setting up realtime subscription for room: ${currentRoomId}`);
+
+      // Create unique channel name per room
+      const channelName = `chat:${currentRoomId}`;
+
+      try {
+        channel = supabase.channel(channelName, {
+          config: {
+            broadcast: { self: false }, // Don't receive own messages through subscription
+          },
+        });
+
+        channel
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'messages',
+              // filter: `room_id=eq.${currentRoomId}`, // Uncomment once table has room_id
+            },
+            (payload: any) => {
+              console.log('[Chat] New message received (realtime):', payload.new);
+              if (isActive) {
+                setMessages((prev) => {
+                  // Avoid duplicates
+                  const exists = prev.some((m) => m.id === payload.new.id);
+                  if (exists) {
+                    console.log('[Chat] Duplicate message ignored');
+                    return prev;
+                  }
+                  return [...prev, payload.new as Message];
+                });
+              }
+            }
+          )
+          .on('subscribe', () => {
+            console.log(`[Chat] Realtime subscription active for room: ${currentRoomId}`);
+          })
+          .on('error', (err: any) => {
+            console.error('[Chat] Subscription error:', err);
+            if (isActive) {
+              setError('Real-time connection lost. Trying to reconnect...');
+            }
+          })
+          .subscribe();
+      } catch (err: any) {
+        console.error('[Chat] Failed to setup realtime:', err.message || err);
+      }
+    };
+
+    // Load messages first
     loadMessages();
 
-    // Real-time subscription
-    const channel = supabase
-      .channel('global-chat')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
-        }
-      )
-      .subscribe();
+    // Then setup realtime subscription
+    setupRealtimeSubscription();
 
+    // Cleanup on unmount or room change
     return () => {
-      supabase.removeChannel(channel);
+      isActive = false;
+      console.log(`[Chat] Cleaning up subscription for room: ${currentRoomId}`);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
-  }, [user]);
+  }, [user, currentRoomId]);
 
   // Optimized message send with debounce
   const handleSend = useCallback(async () => {
@@ -204,24 +393,45 @@ const FullPageChat: React.FC = () => {
     try {
       setIsSending(true);
       setError(null);
-      
-      const { error } = await supabase.from('messages').insert({
+
+      console.log(`[Chat] Sending message to room: ${currentRoomId}`);
+      console.log(`[Chat] User ID: ${user.id}, Display Name: ${user.displayName}`);
+
+      const messageData = {
         user_id: user.id,
         display_name: user.displayName,
-        photo_url: user.photoURL,
+        photo_url: user.photoURL || '',
         content: newMessage.trim(),
-      });
+        // room_id: currentRoomId, // Uncomment once table has room_id column
+      };
 
-      if (error) throw error;
+      console.log('[Chat] Message data:', messageData);
 
+      const { error } = await supabase
+        .from('messages')
+        .insert([messageData]);
+
+      if (error) {
+        console.error('[Chat] Supabase error details:', error);
+        console.error('[Chat] Error code:', error.code);
+        console.error('[Chat] Error details:', error.details);
+        console.error('[Chat] Error hint:', error.hint);
+        throw new Error(`${error.message} (Code: ${error.code})`);
+      }
+
+      console.log('[Chat] Message sent successfully!');
       setNewMessage('');
+      // Auto-focus input for continuous typing
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     } catch (err: any) {
-      console.error('Failed to send message:', err);
-      setError('Failed to send message');
+      console.error('[Chat] Failed to send message:', err.message || err);
+      setError(err.message || 'Failed to send message');
     } finally {
       setIsSending(false);
     }
-  }, [newMessage, user, isSending]);
+  }, [newMessage, user, isSending, currentRoomId]);
 
   return (
     <div
@@ -374,14 +584,19 @@ const FullPageChat: React.FC = () => {
             No messages yet. Start the conversation!
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, index) => {
             const isMe = msg.user_id === user?.id;
+            // Show user info only on first message or when user changes
+            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const shouldShowUserInfo = !prevMsg || prevMsg.user_id !== msg.user_id;
+            
             return (
               <MessageBubble
                 key={msg.id}
                 msg={msg}
                 isMe={isMe}
                 userPhoto={user?.photoURL}
+                shouldShowUserInfo={shouldShowUserInfo}
               />
             );
           })
@@ -423,6 +638,7 @@ const FullPageChat: React.FC = () => {
         }}
       >
         <input
+          ref={inputRef}
           type="text"
           style={{
             flex: 1,
