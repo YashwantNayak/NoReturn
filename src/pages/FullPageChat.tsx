@@ -646,6 +646,7 @@ const FullPageChat: React.FC = () => {
         <input
           ref={inputRef}
           type="text"
+          inputMode="text"
           style={{
             flex: 1,
             padding: '12px 16px',
@@ -656,6 +657,7 @@ const FullPageChat: React.FC = () => {
             fontSize: '16px',
             outline: '2px solid transparent',
             WebkitAppearance: 'none',
+            MozAppearance: 'none',
             height: '44px',
             boxSizing: 'border-box',
             transition: 'border-color 0.2s, box-shadow 0.2s',
@@ -739,18 +741,44 @@ const FullPageChat: React.FC = () => {
           display: none;
         }
         
-        /* For mobile - hide keyboard suggestions */
-        @supports (appearance: none) {
-          input {
+        /* Disable mobile keyboard toolbar suggestions */
+        input[type="text"] {
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
+        }
+        
+        /* Gboard/Keyboard toolbar suppression - remove action suggestions */
+        input:not([type="password"]):not([type="email"]):not([type="tel"]):not([type="number"]) {
+          -webkit-user-select: text;
+          user-select: text;
+        }
+        
+        /* iOS keyboard optimization */
+        @supports (-webkit-touch-callout: none) {
+          input[type="text"] {
+            font-size: 16px;
             -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
+            -webkit-user-select: text;
+          }
+        }
+        
+        /* Android keyboard optimization */
+        @supports (display: grid) {
+          input[type="text"] {
+            -webkit-appearance: none;
           }
         }
         
         @media (max-width: 768px) {
           input:focus, textarea:focus {
             font-size: 16px;
+          }
+          
+          /* Ensure no mobile toolbar suggestions appear */
+          input[type="text"] {
+            -webkit-appearance: none;
+            appearance: none;
           }
         }
       `}</style>

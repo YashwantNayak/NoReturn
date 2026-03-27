@@ -1,121 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../supabaseClient';
-import { Trophy, Medal, Crown } from 'lucide-react';
+import { Trophy, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
+
+interface LeaderboardPlayer {
+  id: string;
+  displayName: string;
+  photoURL: string;
+  coins: number;
+  winRate?: number;
+  initialCoins?: number;
+}
 
 const Leaderboard: React.FC = () => {
   const { user } = useAppContext();
-  const [globalLeaderboard, setGlobalLeaderboard] = useState<any[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchGlobalLeaderboard = async () => {
+    const fetchLeaderboard = async () => {
       try {
-        // Dummy data for demonstration
-        const dummyData = [
-          {
-            id: '1',
-            displayName: 'codyfisher',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=codyfisher',
-            coins: 5413,
-            winRate: 51.24,
-            initialCoins: 1000,
-          },
-          {
-            id: '2',
-            displayName: 'floydmiles',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=floydmiles',
-            coins: 3241,
-            winRate: 51.24,
-            initialCoins: 1000,
-          },
-          {
-            id: '3',
-            displayName: 'jacobjones',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=jacobjones',
-            coins: 2856,
-            winRate: 51.24,
-            initialCoins: 1000,
-          },
-          {
-            id: '4',
-            displayName: 'Crosszero',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=crosszero1',
-            coins: 2342,
-            winRate: 48.6,
-            initialCoins: 1000,
-          },
-          {
-            id: '5',
-            displayName: 'shadowNinja',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=shadowNinja',
-            coins: 1956,
-            winRate: 50.2,
-            initialCoins: 1000,
-          },
-          {
-            id: '6',
-            displayName: 'thunderStrike',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=thunderStrike',
-            coins: 1723,
-            winRate: 49.8,
-            initialCoins: 1000,
-          },
-          {
-            id: '7',
-            displayName: 'vortexForce',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=vortexForce',
-            coins: 1542,
-            winRate: 47.3,
-            initialCoins: 1000,
-          },
-          {
-            id: '8',
-            displayName: 'phoenixRise',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=phoenixRise',
-            coins: 1234,
-            winRate: 52.1,
-            initialCoins: 1000,
-          },
-          {
-            id: '9',
-            displayName: 'eclipseShadow',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=eclipseShadow',
-            coins: 980,
-            winRate: 46.5,
-            initialCoins: 1000,
-          },
-          {
-            id: '10',
-            displayName: 'titanForce',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=titanForce',
-            coins: 756,
-            winRate: 49.2,
-            initialCoins: 1000,
-          },
-        ];
+        setLoading(true);
+        setError(null);
 
-        // Simulate API delay
-        setTimeout(() => {
-          setGlobalLeaderboard(dummyData);
-          setLoading(false);
-        }, 300);
+        console.log('[Leaderboard] Fetching from profiles table...');
 
-        /* Uncomment below to use real Firestore data
-        const q = query(collection(db, 'users'), orderBy('coins', 'desc'), limit(50));
-        const snapshot = await getDocs(q);
-        setGlobalLeaderboard(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-        */
-      } catch (error) {
-        // TODO: Replace with Supabase error handling
-        console.error('Error loading leaderboard:', error);
+        // Fetch from profiles table with snake_case column names
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('id, display_name, photo_url, coins, win_rate')
+          .order('coins', { ascending: false })
+          .limit(50);
+
+        if (fetchError) {
+          console.error('[Leaderboard] Supabase error:', fetchError);
+          throw fetchError;
+        }
+
+        console.log('[Leaderboard] Fetched data:', data);
+
+        // Map database fields to component interface (snake_case → camelCase)
+        if (data && data.length > 0) {
+          const mappedData: LeaderboardPlayer[] = data.map((player: any) => ({
+            id: player.id,
+            displayName: player.display_name || 'Unknown',
+            photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.display_name}`,
+            coins: player.coins || 0,
+            winRate: player.win_rate || 0,
+          }));
+          setLeaderboard(mappedData);
+          console.log('[Leaderboard] Mapped data:', mappedData);
+        } else {
+          console.log('[Leaderboard] No data from database');
+          setLeaderboard([]);
+        }
+      } catch (err: any) {
+        console.error('[Leaderboard] Error fetching:', err);
+        console.error('[Leaderboard] Error message:', err.message);
+        setError(`Failed to load leaderboard: ${err.message}`);
+        setLeaderboard([]);
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchGlobalLeaderboard();
+    fetchLeaderboard();
   }, []);
 
   const colors = {
@@ -127,30 +78,32 @@ const Leaderboard: React.FC = () => {
     border: 'rgba(0, 255, 178, 0.2)',
   };
 
-  const getNetWinning = (player: any) => {
-    return (player.coins - (player.initialCoins || 1000)) || 0;
-  };
-
-  const getNetWinningColor = (value: number) => {
-    return value >= 0 ? colors.primary : '#FF5252';
-  };
-
-  const top3 = globalLeaderboard.slice(0, 3);
-  const restPlayers = globalLeaderboard.slice(3);
+  const top3 = leaderboard.slice(0, 3);
+  const restPlayers = leaderboard.slice(3);
 
   return (
-    <div style={{ padding: '20px 16px', backgroundColor: colors.dark, minHeight: '100vh', color: '#FFFFFF' }}>
+    <div style={{ padding: '20px 16px 100px 16px', backgroundColor: colors.dark, minHeight: '100vh', color: '#FFFFFF' }}>
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
           <Trophy size={28} color={colors.accent} />
           <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0, color: colors.primary }}>LEADERBOARD</h1>
         </div>
-        <p style={{ fontSize: '0px', color: colors.muted, margin: '10px 0 0 0' }}>.</p>
+        <p style={{ fontSize: '12px', color: colors.muted, margin: '10px 0 0 0' }}>.</p>
       </div>
 
       {loading ? (
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: colors.muted }}>Loading leaderboard...</div>
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: colors.muted }}>
+          <p>Loading leaderboard...</p>
+        </div>
+      ) : error ? (
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#FF5252' }}>
+          <p>{error}</p>
+        </div>
+      ) : leaderboard.length === 0 ? (
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: colors.muted }}>
+          <p>No players found yet. Be the first!</p>
+        </div>
       ) : (
         <>
           {/* Podium Section - Top 3 */}
@@ -179,21 +132,24 @@ const Leaderboard: React.FC = () => {
                     }}
                   >
                     <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-                      <div style={{
-                        width: '56px',
-                        height: '56px',
-                        borderRadius: '50%',
-                        backgroundImage: `url(${top3[1].photoURL})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        border: `2px solid ${colors.accent}`,
-                        margin: '0 auto 8px',
-                      }} />
+                      <img
+                        src={top3[1].photoURL}
+                        width="56"
+                        height="56"
+                        style={{
+                          borderRadius: '50%',
+                          border: `2px solid ${colors.accent}`,
+                          marginBottom: '8px',
+                          marginLeft: '12px',
+                          objectFit: 'cover',
+                        }}
+                        alt={top3[1].displayName}
+                      />
                       <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[1].displayName}
                       </p>
                       <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
-                        {top3[1].winRate || 0}%
+                        🪙 {top3[1].coins.toLocaleString()}
                       </p>
                     </div>
                     <div style={{
@@ -226,23 +182,25 @@ const Leaderboard: React.FC = () => {
                       width: '120px',
                     }}
                   >
-                    <div style={{
-                      width: '64px',
-                      height: '64px',
-                      borderRadius: '50%',
-                      backgroundImage: `url(${top3[0].photoURL})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      border: `3px solid #FFD700`,
-                      marginBottom: '8px',
-                      boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)',
-                    }} />
+                    <img
+                      src={top3[0].photoURL}
+                      width="64"
+                      height="64"
+                      style={{
+                        borderRadius: '50%',
+                        border: '3px solid #FFD700',
+                        marginBottom: '8px',
+                        boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)',
+                        objectFit: 'cover',
+                      }}
+                      alt={top3[0].displayName}
+                    />
                     <Crown size={24} color="#FFD700" fill="#FFD700" style={{ marginBottom: '4px' }} />
                     <p style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', color: '#FFD700' }}>
                       {top3[0].displayName}
                     </p>
-                    <p style={{ fontSize: '11px', color: colors.muted, margin: '2px 0 0 0' }}>
-                      {top3[0].winRate || 0}%
+                    <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
+                      🪙 {top3[0].coins.toLocaleString()}
                     </p>
                     <div style={{
                       width: '100%',
@@ -276,21 +234,24 @@ const Leaderboard: React.FC = () => {
                     }}
                   >
                     <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-                      <div style={{
-                        width: '56px',
-                        height: '56px',
-                        borderRadius: '50%',
-                        backgroundImage: `url(${top3[2].photoURL})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        border: `2px solid #CD7F32`,
-                        margin: '0 auto 8px',
-                      }} />
+                      <img
+                        src={top3[2].photoURL}
+                        width="56"
+                        height="56"
+                        style={{
+                          borderRadius: '50%',
+                          border: '2px solid #CD7F32',
+                          marginBottom: '8px',
+                          marginLeft: '10px',
+                          objectFit: 'cover',
+                        }}
+                        alt={top3[2].displayName}
+                      />
                       <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[2].displayName}
                       </p>
                       <p style={{ fontSize: '10px', color: colors.muted, margin: '2px 0 0 0' }}>
-                        {top3[2].winRate || 0}%
+                        🪙 {top3[2].coins.toLocaleString()}
                       </p>
                     </div>
                     <div style={{
@@ -322,95 +283,100 @@ const Leaderboard: React.FC = () => {
               overflow: 'hidden',
             }}>
               {/* Table Header */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '50px 1fr 90px 120px',
-                padding: '14px 16px',
-                backgroundColor: 'rgba(0, 255, 178, 0.08)',
-                borderBottom: `1px solid ${colors.border}`,
-                fontSize: '11px',
-                fontWeight: '600',
-                color: colors.muted,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '50px 1fr 100px',
+                  padding: '14px 16px',
+                  backgroundColor: 'rgba(0, 255, 178, 0.08)',
+                  borderBottom: `1px solid ${colors.border}`,
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  color: colors.muted,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 <span>Rank</span>
-                <span>User</span>
-                <span style={{ textAlign: 'right' }}>Win %</span>
-                <span style={{ textAlign: 'right' }}>Net Win (₹)</span>
+                <span>Player</span>
+                <span style={{ textAlign: 'right' }}>Coins</span>
               </div>
 
               {/* Table Rows */}
-              {restPlayers.map((player, index) => {
-                const netWinning = getNetWinning(player);
-                return (
-                  <motion.div
-                    key={player.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: (index + 3) * 0.05 }}
+              {restPlayers.map((player, index) => (
+                <motion.div
+                  key={player.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: (index + 3) * 0.05 }}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '50px 1fr 100px',
+                    padding: '14px 16px',
+                    borderBottom: index < restPlayers.length - 1 ? `0.5px solid ${colors.border}` : 'none',
+                    alignItems: 'center',
+                    backgroundColor: player.id === user?.id ? 'rgba(0, 255, 178, 0.06)' : 'transparent',
+                  }}
+                >
+                  <div
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '50px 1fr 90px 120px',
-                      padding: '14px 16px',
-                      borderBottom: index < restPlayers.length - 1 ? `0.5px solid ${colors.border}` : 'none',
-                      alignItems: 'center',
-                      backgroundColor: player.id === user?.uid ? 'rgba(0, 255, 178, 0.06)' : 'transparent',
-                    }}
-                  >
-                    <div style={{
                       fontSize: '14px',
                       fontWeight: 'bold',
-                      color: player.id === user?.uid ? colors.primary : colors.muted,
-                    }}>
-                      {index + 4}
-                    </div>
+                      color: player.id === user?.id ? colors.primary : colors.muted,
+                    }}
+                  >
+                    {index + 4}
+                  </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <img
-                        src={player.photoURL}
-                        width="40"
-                        height="40"
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img
+                      src={player.photoURL}
+                      width="40"
+                      height="40"
+                      style={{
+                        borderRadius: '50%',
+                        backgroundColor: '#222',
+                        border: player.id === user?.id ? `1px solid ${colors.primary}` : 'none',
+                        objectFit: 'cover',
+                      }}
+                      alt={player.displayName}
+                    />
+                    <div>
+                      <p
                         style={{
-                          borderRadius: '50%',
-                          backgroundColor: '#222',
-                          border: player.id === user?.uid ? `1px solid ${colors.primary}` : 'none',
-                        }}
-                        alt=""
-                      />
-                      <div>
-                        <p style={{
                           fontSize: '13px',
                           fontWeight: '500',
                           margin: '0',
-                          color: player.id === user?.uid ? colors.primary : '#FFFFFF',
-                        }}>
-                          {player.displayName}
-                          {player.id === user?.uid && ' (You)'}
-                        </p>
-                      </div>
+                          color: player.id === user?.id ? colors.primary : '#FFFFFF',
+                        }}
+                      >
+                        {player.displayName}
+                        {player.id === user?.id && ' (You)'}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '11px',
+                          color: colors.muted,
+                          margin: '2px 0 0 0',
+                        }}
+                      >
+                        {player.winRate || 0}% Win Rate
+                      </p>
                     </div>
+                  </div>
 
-                    <div style={{
+                  <div
+                    style={{
                       textAlign: 'right',
                       fontSize: '13px',
                       fontWeight: '600',
-                      color: colors.accent,
-                    }}>
-                      {player.winRate || 0}%
-                    </div>
-
-                    <div style={{
-                      textAlign: 'right',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      color: getNetWinningColor(netWinning),
-                    }}>
-                      {netWinning >= 0 ? '+' : ''}{netWinning.toLocaleString()}
-                    </div>
-                  </motion.div>
-                );
-              })}
+                      color: colors.primary,
+                    }}
+                  >
+                    🪙 {player.coins.toLocaleString()}
+                  </div>
+                </motion.div>
+              ))}
             </div>
           )}
         </>
