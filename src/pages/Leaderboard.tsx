@@ -15,59 +15,93 @@ interface LeaderboardPlayer {
 
 const Leaderboard: React.FC = () => {
   const { user } = useAppContext();
-  const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
+  const [displayedPlayers, setDisplayedPlayers] = useState<LeaderboardPlayer[]>([]);
+  const [allPlayers, setAllPlayers] = useState<LeaderboardPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const INITIAL_LOAD = 10;
+  const LOAD_MORE_COUNT = 10;
 
   useEffect(() => {
-    const fetchLeaderboard = async () => {
+    const fetchInitialLeaderboard = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        console.log('[Leaderboard] Fetching from profiles table...');
+        console.log('[Leaderboard] Fetching initial players...');
 
-        // Fetch from profiles table with snake_case column names
+        // Fetch first batch + 1 to know if there are more
         const { data, error: fetchError } = await supabase
           .from('profiles')
           .select('id, display_name, photo_url, coins, win_rate')
           .order('coins', { ascending: false })
-          .limit(50);
+          .limit(INITIAL_LOAD + 1);
 
         if (fetchError) {
           console.error('[Leaderboard] Supabase error:', fetchError);
           throw fetchError;
         }
 
-        console.log('[Leaderboard] Fetched data:', data);
-
-        // Map database fields to component interface (snake_case → camelCase)
-        if (data && data.length > 0) {
-          const mappedData: LeaderboardPlayer[] = data.map((player: any) => ({
-            id: player.id,
-            displayName: player.display_name || 'Unknown',
-            photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.display_name}`,
-            coins: player.coins || 0,
-            winRate: player.win_rate || 0,
-          }));
-          setLeaderboard(mappedData);
-          console.log('[Leaderboard] Mapped data:', mappedData);
-        } else {
-          console.log('[Leaderboard] No data from database');
-          setLeaderboard([]);
-        }
+        const mappedData = mapPlayers(data || []);
+        
+        // Check if there are more players
+        setHasMore(mappedData.length > INITIAL_LOAD);
+        
+        // Store all fetched, but only display first batch
+        setAllPlayers(mappedData.slice(0, mappedData.length - (mappedData.length > INITIAL_LOAD ? 1 : 0)));
+        setDisplayedPlayers(mappedData.slice(0, INITIAL_LOAD));
+        
+        console.log(`[Leaderboard] Loaded ${INITIAL_LOAD} initial players, hasMore: ${mappedData.length > INITIAL_LOAD}`);
       } catch (err: any) {
-        console.error('[Leaderboard] Error fetching:', err);
-        console.error('[Leaderboard] Error message:', err.message);
+        console.error('[Leaderboard] Error fetching:', err.message);
         setError(`Failed to load leaderboard: ${err.message}`);
-        setLeaderboard([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchLeaderboard();
+    fetchInitialLeaderboard();
   }, []);
+
+  const mapPlayers = (data: any[]): LeaderboardPlayer[] => {
+    return data.map((player: any) => ({
+      id: player.id,
+      displayName: player.display_name || 'Unknown',
+      photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.display_name}`,
+      coins: player.coins || 0,
+      winRate: player.win_rate || 0,
+    }));
+  };
+
+  const handleLoadMore = async () => {
+    try {
+      setLoadingMore(true);
+      
+      const offset = displayedPlayers.length;
+      const { data, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id, display_name, photo_url, coins, win_rate')
+        .order('coins', { ascending: false })
+        .range(offset, offset + LOAD_MORE_COUNT);
+
+      if (fetchError) throw fetchError;
+
+      const newPlayers = mapPlayers(data || []);
+      const updatedDisplayed = [...displayedPlayers, ...newPlayers];
+      
+      setDisplayedPlayers(updatedDisplayed);
+      setHasMore(newPlayers.length === LOAD_MORE_COUNT + 1);
+      
+      console.log(`[Leaderboard] Loaded ${newPlayers.length} more players`);
+    } catch (err: any) {
+      console.error('[Leaderboard] Error loading more:', err.message);
+      setError('Failed to load more players');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const colors = {
     dark: '#000000',
@@ -78,8 +112,8 @@ const Leaderboard: React.FC = () => {
     border: 'rgba(0, 255, 178, 0.2)',
   };
 
-  const top3 = leaderboard.slice(0, 3);
-  const restPlayers = leaderboard.slice(3);
+  const top3 = displayedPlayers.slice(0, 3);
+  const restPlayers = displayedPlayers.slice(3);
 
   return (
     <div style={{ padding: '20px 16px 100px 16px', backgroundColor: colors.dark, minHeight: '100vh', color: '#FFFFFF' }}>
@@ -100,7 +134,7 @@ const Leaderboard: React.FC = () => {
         <div style={{ padding: '60px 20px', textAlign: 'center', color: '#FF5252' }}>
           <p>{error}</p>
         </div>
-      ) : leaderboard.length === 0 ? (
+      ) : displayedPlayers.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', color: colors.muted }}>
           <p>No players found yet. Be the first!</p>
         </div>
@@ -144,6 +178,8 @@ const Leaderboard: React.FC = () => {
                           objectFit: 'cover',
                         }}
                         alt={top3[1].displayName}
+                        loading="lazy"
+                        decoding="async"
                       />
                       <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[1].displayName}
@@ -194,6 +230,8 @@ const Leaderboard: React.FC = () => {
                         objectFit: 'cover',
                       }}
                       alt={top3[0].displayName}
+                      loading="lazy"
+                      decoding="async"
                     />
                     <Crown size={20} color="#FFD700" fill="#FFD700" style={{ marginBottom: '4px' }} />
                     <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFD700' }}>
@@ -246,6 +284,8 @@ const Leaderboard: React.FC = () => {
                           objectFit: 'cover',
                         }}
                         alt={top3[2].displayName}
+                        loading="lazy"
+                        decoding="async"
                       />
                       <p style={{ fontSize: '11px', fontWeight: 'bold', margin: '0', color: '#FFFFFF' }}>
                         {top3[2].displayName}
@@ -340,6 +380,8 @@ const Leaderboard: React.FC = () => {
                         objectFit: 'cover',
                       }}
                       alt={player.displayName}
+                      loading="lazy"
+                      decoding="async"
                     />
                     <div>
                       <p
@@ -377,6 +419,30 @@ const Leaderboard: React.FC = () => {
                   </div>
                 </motion.div>
               ))}
+            </div>
+          )}
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div style={{ marginTop: '24px', textAlign: 'center' }}>
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                style={{
+                  padding: '12px 32px',
+                  backgroundColor: loadingMore ? 'rgba(0, 255, 178, 0.5)' : colors.primary,
+                  color: '#000000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  opacity: loadingMore ? 0.6 : 1,
+                  transition: 'opacity 0.2s',
+                }}
+              >
+                {loadingMore ? 'Loading...' : 'Load More Players'}
+              </button>
             </div>
           )}
         </>

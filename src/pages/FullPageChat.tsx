@@ -15,6 +15,58 @@ interface Message {
   room_id?: string;
 }
 
+// Optimized Message List with Batch Rendering
+const OptimizedMessageList = React.memo(({ messages, user }: any) => {
+  // Batch messages into groups to reduce re-renders - memoize properly
+  const messageBatches = useMemo(() => {
+    const batches = [];
+    for (let i = 0; i < messages.length; i += 20) {
+      batches.push(messages.slice(i, i + 20));
+    }
+    return batches;
+  }, [messages]); // Actually depend on messages array, not just length
+
+  // Memoize user info flags to avoid recalculating
+  const userInfoFlags = useMemo(() => {
+    return messages.map((msg: Message, idx: number) => {
+      const prevMsg = idx > 0 ? messages[idx - 1] : null;
+      return !prevMsg || prevMsg.user_id !== msg.user_id;
+    });
+  }, [messages]);
+
+  return (
+    <AnimatePresence mode="wait">
+      {messageBatches.map((batch, batchIndex) => (
+        <React.Fragment key={`batch-${batchIndex}`}>
+          {batch.map((msg: Message, msgIndex: number) => {
+            const globalIndex = batchIndex * 20 + msgIndex;
+            const isMe = msg.user_id === user?.id;
+            const shouldShowUserInfo = userInfoFlags[globalIndex];
+
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: 'tween', duration: 0.15 }}
+              >
+                <MessageBubble
+                  msg={msg}
+                  isMe={isMe}
+                  userPhoto={user?.photoURL}
+                  shouldShowUserInfo={shouldShowUserInfo}
+                />
+              </motion.div>
+            );
+          })}
+        </React.Fragment>
+      ))}
+    </AnimatePresence>
+  );
+});
+
+OptimizedMessageList.displayName = 'OptimizedMessageList';
+
 // Memoized Message Component for performance
 const MessageBubble = React.memo(({ 
   msg, 
@@ -56,6 +108,7 @@ const MessageBubble = React.memo(({
           style={{ borderRadius: '50%', flexShrink: 0 }}
           alt={msg.display_name}
           loading="lazy"
+          decoding="async"
         />
 
         <div style={{ maxWidth: '65%' }}>
@@ -241,37 +294,6 @@ const MessageBubble = React.memo(({
 
 MessageBubble.displayName = 'MessageBubble';
 
-// Memoized Motion Wrapper for smooth message animations
-const MotionMessageBubble = React.memo(({ 
-  msg, 
-  isMe, 
-  userPhoto,
-  shouldShowUserInfo = true,
-  index
-}: { 
-  msg: Message; 
-  isMe: boolean; 
-  userPhoto?: string;
-  shouldShowUserInfo?: boolean;
-  index: number;
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -10 }}
-    transition={{ type: 'spring', damping: 20, stiffness: 300, delay: index * 0.02 }}
-  >
-    <MessageBubble
-      msg={msg}
-      isMe={isMe}
-      userPhoto={userPhoto}
-      shouldShowUserInfo={shouldShowUserInfo}
-    />
-  </motion.div>
-));
-
-MotionMessageBubble.displayName = 'MotionMessageBubble';
-
 const FullPageChat: React.FC = () => {
   const { user } = useAppContext();
   const navigate = useNavigate();
@@ -288,25 +310,8 @@ const FullPageChat: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const shouldAutoScroll = useRef(true);
-
-  // Check if user is scrolled near bottom
-  const handleScroll = useCallback(() => {
-    if (!messagesContainerRef.current) return;
-    
-    const { scrollHeight, scrollTop, clientHeight } = messagesContainerRef.current;
-    shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 100;
-  }, []);
-
-  // Smart auto-scroll - only scroll if user is at bottom
-  useEffect(() => {
-    if (!shouldAutoScroll.current || !bottomRef.current) return;
-    
-    // Use requestAnimationFrame for smooth scrolling
-    requestAnimationFrame(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
-    });
-  }, [messages]);
+  const messageIdsRef = useRef<Set<string>>(new Set()); // Fast O(1) duplicate check
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Debounce rapid updates
 
   // Load messages + setup real-time subscription
   useEffect(() => {
@@ -337,7 +342,10 @@ const FullPageChat: React.FC = () => {
 
         if (isActive) {
           setMessages(data || []);
-          shouldAutoScroll.current = true;
+          // Pre-populate message IDs for fast duplicate detection
+          (data || []).forEach((msg: Message) => {
+            messageIdsRef.current.add(msg.id);
+          });
           console.log(`[Chat] Loaded ${data?.length || 0} messages`);
         }
       } catch (err: any) {
@@ -374,17 +382,40 @@ const FullPageChat: React.FC = () => {
             },
             (payload: any) => {
               console.log('[Chat] New message received (realtime):', payload.new);
-              if (isActive) {
-                setMessages((prev) => {
-                  // Avoid duplicates
-                  const exists = prev.some((m) => m.id === payload.new.id);
-                  if (exists) {
-                    console.log('[Chat] Duplicate message ignored');
-                    return prev;
-                  }
-                  return [...prev, payload.new as Message];
-                });
+              
+              // Fast O(1) duplicate check using Set
+              if (messageIdsRef.current.has(payload.new.id)) {
+                console.log('[Chat] Duplicate message ignored');
+                return;
               }
+              
+              messageIdsRef.current.add(payload.new.id);
+              
+              // Debounce rapid updates to prevent excessive re-renders
+              if (updateTimeoutRef.current) {
+                clearTimeout(updateTimeoutRef.current);
+              }
+              
+              updateTimeoutRef.current = setTimeout(() => {
+                if (isActive) {
+                  setMessages((prev) => {
+                    // Double-check it doesn't exist
+                    const exists = prev.some((m) => m.id === payload.new.id);
+                    if (exists) return prev;
+                    
+                    const updated = [...prev, payload.new as Message];
+                    
+                    // Keep only last 100 messages to manage memory
+                    if (updated.length > 100) {
+                      const removed = updated.slice(0, updated.length - 100);
+                      removed.forEach((msg) => messageIdsRef.current.delete(msg.id));
+                      return updated.slice(-100);
+                    }
+                    
+                    return updated;
+                  });
+                }
+              }, 50); // Debounce by 50ms to batch rapid updates
             }
           )
           .on('subscribe', () => {
@@ -415,60 +446,84 @@ const FullPageChat: React.FC = () => {
       if (channel) {
         supabase.removeChannel(channel);
       }
+      // Clear debounce timeout
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      // Clear message IDs cache
+      messageIdsRef.current.clear();
     };
   }, [user, currentRoomId]);
 
-  // Optimized message send with debounce
+  // Optimized message send with retry logic
   const handleSend = useCallback(async () => {
     // Check current state - don't include isSending in deps!
     if (!newMessage.trim() || !user) return;
 
-    try {
-      setIsSending(true);
-      setError(null);
+    const messageData = {
+      user_id: user.id,
+      display_name: user.displayName,
+      photo_url: user.photoURL || '',
+      content: newMessage.trim(),
+      // room_id: currentRoomId, // Uncomment once table has room_id column
+    };
 
-      console.log(`[Chat] Sending message to room: ${currentRoomId}`);
-      console.log(`[Chat] User ID: ${user.id}, Display Name: ${user.displayName}`);
+    // Retry logic with exponential backoff
+    const maxRetries = 3;
+    let lastError: any = null;
 
-      const messageData = {
-        user_id: user.id,
-        display_name: user.displayName,
-        photo_url: user.photoURL || '',
-        content: newMessage.trim(),
-        // room_id: currentRoomId, // Uncomment once table has room_id column
-      };
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        setIsSending(true);
+        if (attempt === 0) setError(null);
 
-      console.log('[Chat] Message data:', messageData);
+        console.log(`[Chat] Sending message (attempt ${attempt + 1}/${maxRetries})`);
 
-      const { error } = await supabase
-        .from('messages')
-        .insert([messageData]);
+        const { error } = await supabase
+          .from('messages')
+          .insert([messageData]);
 
-      if (error) {
-        console.error('[Chat] Supabase error details:', error);
-        console.error('[Chat] Error code:', error.code);
-        console.error('[Chat] Error details:', error.details);
-        console.error('[Chat] Error hint:', error.hint);
-        throw new Error(`${error.message} (Code: ${error.code})`);
+        if (error) {
+          throw error;
+        }
+
+        console.log('[Chat] Message sent successfully!');
+        setNewMessage('');
+        setIsSending(false);
+        return; // Success - exit function
+      } catch (err: any) {
+        lastError = err;
+        console.error(`[Chat] Attempt ${attempt + 1} failed:`, err.message);
+
+        // If it's not a network error, don't retry
+        if (err.code && err.code !== 'NETWORK_ERROR' && attempt > 0) {
+          break;
+        }
+
+        // Exponential backoff: 300ms, 600ms, 1200ms
+        if (attempt < maxRetries - 1) {
+          const delayMs = 300 * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
       }
-
-      console.log('[Chat] Message sent successfully!');
-      setNewMessage('');
-    } catch (err: any) {
-      console.error('[Chat] Failed to send message:', err.message || err);
-      setError(err.message || 'Failed to send message');
-    } finally {
-      setIsSending(false);
-      // Focus with multiple attempts to ensure it works
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      });
-      // Backup focus for reliability
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
     }
+
+    // All retries failed
+    setError(
+      lastError?.message ||
+      'Failed to send message. Check connection and try again.'
+    );
+    setIsSending(false);
+    
+    // Focus with multiple attempts to ensure it works
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    // Backup focus for reliability
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
   }, [newMessage, user, currentRoomId]);
 
   return (
@@ -547,10 +602,9 @@ const FullPageChat: React.FC = () => {
         </div>
       </div>
 
-      {/* MESSAGES CONTAINER — Scrollable Middle Section */}
+      {/* MESSAGES CONTAINER — Optimized Middle Section */}
       <div
         ref={messagesContainerRef}
-        onScroll={handleScroll}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -565,114 +619,99 @@ const FullPageChat: React.FC = () => {
           scrollBehavior: 'smooth',
         }}
       >
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div
-              key="skeleton-loader"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{ display: 'contents' }}
-            >
-              {/* Smart skeleton loaders with smooth animation */}
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => (
-                <motion.div
-                  key={`skeleton-${i}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    type: 'spring',
-                    damping: 20,
-                    stiffness: 300,
-                    delay: i * 0.05,
-                  }}
+        {loading ? (
+          <motion.div
+            key="skeleton-loader"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ display: 'contents' }}
+          >
+            {/* Smart skeleton loaders with smooth animation */}
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => (
+              <motion.div
+                key={`skeleton-${i}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  type: 'spring',
+                  damping: 20,
+                  stiffness: 300,
+                  delay: i * 0.05,
+                }}
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <div
                   style={{
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'flex-end',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                    flexShrink: 0,
+                    animation: 'pulse 1.5s ease-in-out infinite',
                   }}
-                >
+                />
+                <div style={{ maxWidth: '65%' }}>
                   <div
                     style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
+                      width: '100px',
+                      height: '12px',
                       backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                      flexShrink: 0,
+                      borderRadius: '4px',
+                      marginBottom: '8px',
                       animation: 'pulse 1.5s ease-in-out infinite',
                     }}
                   />
-                  <div style={{ maxWidth: '65%' }}>
-                    <div
-                      style={{
-                        width: '100px',
-                        height: '12px',
-                        backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                        borderRadius: '4px',
-                        marginBottom: '8px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                      }}
-                    />
-                    <div
-                      style={{
-                        width: '300px',
-                        height: '42px',
-                        backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                        borderRadius: '16px',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                      }}
-                    />
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : messages.length === 0 && !error ? (
-            <motion.div
-              key="empty-state"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '200px',
-                color: 'rgba(255, 255, 255, 0.4)',
-              }}
-            >
-              No messages yet. Start the conversation!
-            </motion.div>
-          ) : (
-            <motion.div
-              key="messages-list"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{ display: 'contents' }}
-            >
-              {messages.map((msg, index) => {
-                const isMe = msg.user_id === user?.id;
-                // Show user info only on first message or when user changes
-                const prevMsg = index > 0 ? messages[index - 1] : null;
-                const shouldShowUserInfo = !prevMsg || prevMsg.user_id !== msg.user_id;
-
-                return (
-                  <MotionMessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    isMe={isMe}
-                    userPhoto={user?.photoURL}
-                    shouldShowUserInfo={shouldShowUserInfo}
-                    index={index}
+                  <div
+                    style={{
+                      width: '300px',
+                      height: '42px',
+                      backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                      borderRadius: '16px',
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }}
                   />
-                );
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        ) : messages.length === 0 && !error ? (
+          <motion.div
+            key="empty-state"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '200px',
+              color: 'rgba(255, 255, 255, 0.4)',
+            }}
+          >
+            No messages yet. Start the conversation!
+          </motion.div>
+        ) : (
+          <motion.div
+            key="messages-list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ display: 'contents' }}
+          >
+            <OptimizedMessageList 
+              messages={messages}
+              user={user}
+            />
+          </motion.div>
+        )}
         <div ref={bottomRef} style={{ height: '0' }} />
       </div>
 
