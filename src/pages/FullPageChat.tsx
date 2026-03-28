@@ -3,6 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { ArrowLeft, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface Message {
   id: string;
@@ -239,6 +240,37 @@ const MessageBubble = React.memo(({
 });
 
 MessageBubble.displayName = 'MessageBubble';
+
+// Memoized Motion Wrapper for smooth message animations
+const MotionMessageBubble = React.memo(({ 
+  msg, 
+  isMe, 
+  userPhoto,
+  shouldShowUserInfo = true,
+  index
+}: { 
+  msg: Message; 
+  isMe: boolean; 
+  userPhoto?: string;
+  shouldShowUserInfo?: boolean;
+  index: number;
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ type: 'spring', damping: 20, stiffness: 300, delay: index * 0.02 }}
+  >
+    <MessageBubble
+      msg={msg}
+      isMe={isMe}
+      userPhoto={userPhoto}
+      shouldShowUserInfo={shouldShowUserInfo}
+    />
+  </motion.div>
+));
+
+MotionMessageBubble.displayName = 'MotionMessageBubble';
 
 const FullPageChat: React.FC = () => {
   const { user } = useAppContext();
@@ -533,80 +565,114 @@ const FullPageChat: React.FC = () => {
           scrollBehavior: 'smooth',
         }}
       >
-        {loading ? (
-          // Smart skeleton loaders instead of blocking
-          <>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={`skeleton-${i}`}
-                style={{
-                  display: 'flex',
-                  gap: '8px',
-                  alignItems: 'flex-end',
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }}
-              >
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                    flexShrink: 0,
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="skeleton-loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{ display: 'contents' }}
+            >
+              {/* Smart skeleton loaders with smooth animation */}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => (
+                <motion.div
+                  key={`skeleton-${i}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    type: 'spring',
+                    damping: 20,
+                    stiffness: 300,
+                    delay: i * 0.05,
                   }}
-                />
-                <div style={{ maxWidth: '65%' }}>
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'flex-end',
+                  }}
+                >
                   <div
                     style={{
-                      width: '100px',
-                      height: '12px',
-                      backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                      borderRadius: '4px',
-                      marginBottom: '8px',
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: '200px',
+                      width: '32px',
                       height: '32px',
+                      borderRadius: '50%',
                       backgroundColor: 'rgba(0, 255, 178, 0.1)',
-                      borderRadius: '16px',
+                      flexShrink: 0,
+                      animation: 'pulse 1.5s ease-in-out infinite',
                     }}
                   />
-                </div>
-              </div>
-            ))}
-          </>
-        ) : messages.length === 0 && !error ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '200px',
-              color: 'rgba(255, 255, 255, 0.4)',
-            }}
-          >
-            No messages yet. Start the conversation!
-          </div>
-        ) : (
-          messages.map((msg, index) => {
-            const isMe = msg.user_id === user?.id;
-            // Show user info only on first message or when user changes
-            const prevMsg = index > 0 ? messages[index - 1] : null;
-            const shouldShowUserInfo = !prevMsg || prevMsg.user_id !== msg.user_id;
-            
-            return (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                isMe={isMe}
-                userPhoto={user?.photoURL}
-                shouldShowUserInfo={shouldShowUserInfo}
-              />
-            );
-          })
-        )}
+                  <div style={{ maxWidth: '65%' }}>
+                    <div
+                      style={{
+                        width: '100px',
+                        height: '12px',
+                        backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                        borderRadius: '4px',
+                        marginBottom: '8px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <div
+                      style={{
+                        width: '300px',
+                        height: '42px',
+                        backgroundColor: 'rgba(0, 255, 178, 0.1)',
+                        borderRadius: '16px',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : messages.length === 0 && !error ? (
+            <motion.div
+              key="empty-state"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '200px',
+                color: 'rgba(255, 255, 255, 0.4)',
+              }}
+            >
+              No messages yet. Start the conversation!
+            </motion.div>
+          ) : (
+            <motion.div
+              key="messages-list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{ display: 'contents' }}
+            >
+              {messages.map((msg, index) => {
+                const isMe = msg.user_id === user?.id;
+                // Show user info only on first message or when user changes
+                const prevMsg = index > 0 ? messages[index - 1] : null;
+                const shouldShowUserInfo = !prevMsg || prevMsg.user_id !== msg.user_id;
+
+                return (
+                  <MotionMessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    isMe={isMe}
+                    userPhoto={user?.photoURL}
+                    shouldShowUserInfo={shouldShowUserInfo}
+                    index={index}
+                  />
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={bottomRef} style={{ height: '0' }} />
       </div>
 

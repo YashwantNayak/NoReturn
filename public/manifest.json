@@ -1,6 +1,6 @@
 {
-  "name": "RoomBlast - IPL Prediction Game",
-  "short_name": "RoomBlast",
+  "name": "NoReturn11 - IPL Prediction Game",
+  "short_name": "NoReturn11",
   "description": "Join the ultimate IPL prediction game and win real rewards",
   "start_url": "/",
   "scope": "/",
@@ -25,7 +25,7 @@
   "categories": ["games", "entertainment"],
   "screenshots": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%23000000' width='540' height='720'/><text x='270' y='360' font-size='48' fill='%2300FFB2' text-anchor='middle' font-family='Arial'>RoomBlast</text></svg>",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%23000000' width='540' height='720'/><text x='270' y='360' font-size='48' fill='%2300FFB2' text-anchor='middle' font-family='Arial'>NoReturn11</text></svg>",
       "sizes": "540x720",
       "form_factor": "narrow"
     }

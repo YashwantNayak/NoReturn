@@ -1,12 +1,56 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { PlayCircle, Trophy, Flame } from 'lucide-react';
 import { motion } from 'motion/react';
+import { supabase } from '../supabaseClient';
+
+interface LeaderboardPlayer {
+  id: string;
+  displayName: string;
+  photoURL: string;
+  coins: number;
+  winRate?: number;
+}
 
 const Home: React.FC = () => {
   const { user } = useAppContext();
   const navigate = useNavigate();
+  const [topPlayers, setTopPlayers] = useState<LeaderboardPlayer[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+
+  useEffect(() => {
+    const fetchTopPlayers = async () => {
+      try {
+        setLoadingLeaderboard(true);
+        
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('id, display_name, photo_url, coins, win_rate')
+          .order('coins', { ascending: false })
+          .limit(3);
+
+        if (fetchError) throw fetchError;
+
+        if (data && data.length > 0) {
+          const mappedData: LeaderboardPlayer[] = data.map((player: any) => ({
+            id: player.id,
+            displayName: player.display_name || 'Unknown',
+            photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.display_name}`,
+            coins: player.coins || 0,
+            winRate: player.win_rate || 0,
+          }));
+          setTopPlayers(mappedData);
+        }
+      } catch (error) {
+        console.error('Error fetching top players:', error);
+      } finally {
+        setLoadingLeaderboard(false);
+      }
+    };
+
+    fetchTopPlayers();
+  }, []);
 
   if (!user) return null;
 
@@ -106,25 +150,50 @@ const Home: React.FC = () => {
           </h2>
         </div>
         <div style={{ backgroundColor: '#111111', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-          {[1, 2, 3].map((rank) => (
-            <div key={rank} style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '14px 16px',
-              borderBottom: rank < 3 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
-              gap: '12px'
-            }}>
-              <span style={{ fontSize: '16px', fontWeight: 'bold', color: rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : '#CD7F32', width: '20px' }}>
-                {rank}
-              </span>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#333' }} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 'bold', fontSize: '14px', margin: 0 }}>Player {rank}</p>
-                <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', margin: '2px 0 0 0' }}>Win Rate: {68 - rank * 5}%</p>
-              </div>
-              <p style={{ fontWeight: 'bold', color: '#00FFB2', fontSize: '14px', margin: 0 }}>🪙 {(100000 / rank).toLocaleString()}</p>
+          {loadingLeaderboard ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+              <p>Loading top players...</p>
             </div>
-          ))}
+          ) : topPlayers.length > 0 ? (
+            <>
+              {topPlayers.map((player, index) => {
+                const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+                return (
+                  <div key={player.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '14px 16px',
+                    borderBottom: index < topPlayers.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+                    gap: '12px'
+                  }}>
+                    <span style={{ fontSize: '16px', fontWeight: 'bold', color: rankColors[index], width: '20px' }}>
+                      {index + 1}
+                    </span>
+                    <img 
+                      src={player.photoURL} 
+                      alt={player.displayName}
+                      style={{ 
+                        width: '36px', 
+                        height: '36px', 
+                        borderRadius: '50%',
+                        border: `2px solid ${rankColors[index]}`,
+                        objectFit: 'cover'
+                      }} 
+                    />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 'bold', fontSize: '14px', margin: 0 }}>{player.displayName}</p>
+                      <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', margin: '2px 0 0 0' }}>Win Rate: {player.winRate || 0}%</p>
+                    </div>
+                    <p style={{ fontWeight: 'bold', color: '#00FFB2', fontSize: '14px', margin: 0 }}>🪙 {player.coins.toLocaleString()}</p>
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+              <p>No players found</p>
+            </div>
+          )}
           <button
             onClick={() => navigate('/leaderboard')}
             style={{

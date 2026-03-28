@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
             animation: 'spin 1s linear infinite',
             margin: '0 auto 16px'
           }} />
-          <p style={{ fontWeight: 'bold', letterSpacing: '1px' }}>LOADING ROOMBLAST...</p>
+          <p style={{ fontWeight: 'bold', letterSpacing: '1px' }}>LOADING NORETURN11...</p>
         </div>
         <style>{`
           @keyframes spin {

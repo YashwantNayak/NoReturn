@@ -5,7 +5,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // Storage adapter with fallback for private browsing
 const createStorageAdapter = () => {
-  const testKey = '_roomblast_test_'
+  const testKey = '_noreturn11_test_'
   try {
     localStorage.setItem(testKey, 'true')
     localStorage.removeItem(testKey)
@@ -29,6 +29,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: true,
     flowType: 'pkce',
     storage: createStorageAdapter(),
-    storageKey: 'roomblast-auth'
+    storageKey: 'noreturn11-auth'
   }
 })

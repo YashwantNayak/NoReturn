@@ -227,7 +227,7 @@ const Auth: React.FC = () => {
       >
         <div style={{ marginBottom: '32px' }}>
           <Zap size={48} color="#00FFB2" fill="#00FFB2" style={{ marginBottom: '16px' }} />
-          <h1 style={{ color: '#FFFFFF', fontSize: '28px', fontWeight: 'bold' }}>RoomBlast</h1>
+          <h1 style={{ color: '#FFFFFF', fontSize: '28px', fontWeight: 'bold' }}>NoReturn11</h1>
           <p style={{ color: 'rgba(255, 255, 255, 0.6)', marginTop: '8px' }}>
             {isLogin ? 'Welcome back, predict and win!' : 'Join the ultimate prediction game!'}
           </p>

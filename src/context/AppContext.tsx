@@ -220,7 +220,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setBets([]);
 
       // Clean all storage keys
-      const keysToRemove = ['roomblast-auth', 'roomblast-auth-v2', 'supabase.auth.token'];
+      const keysToRemove = ['noreturn11-auth', 'noreturn11-auth-v2', 'supabase.auth.token'];
       keysToRemove.forEach(key => {
         try {
           localStorage.removeItem(key);

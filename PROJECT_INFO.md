@@ -1,10 +1,10 @@
-# 🏏 RoomBlast Web - Project Information
+# 🏏 NoReturn11 Web - Project Information
 
 ## Overview
-**RoomBlast Web** is a real-time IPL 2026 prediction game web application where users can create private rooms with friends and play fun prediction games using virtual coins. It's like a fantasy cricket prediction experience focused on individual match predictions rather than long-term leagues.
+**NoReturn11 Web** is a real-time IPL 2026 prediction game web application where users can create private rooms with friends and play fun prediction games using virtual coins. It's like a fantasy cricket prediction experience focused on individual match predictions rather than long-term leagues.
 
 ## Project Description
-- **Name**: RoomBlast Web
+- **Name**: NoReturn11 Web
 - **Type**: Real-time Web Application
 - **Purpose**: Enable users to predict IPL match outcomes with friends in private rooms
 - **Virtual Currency**: Users play with virtual coins - they can place bets on various match predictions and win/lose coins based on accuracy
@@ -66,7 +66,7 @@
 ## Project Structure
 
 ```
-roomblast-web/
+noreturn11-web/
 ├── src/
 │   ├── components/          # Reusable UI components
 │   ├── context/             # React Context for state management
