@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { useMatch } from '../context/MatchContext';
 import { supabase } from '../supabaseClient';
 import { ArrowLeft, Zap, Check, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -8,31 +9,69 @@ import { motion, AnimatePresence } from 'motion/react';
 const Betting: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const { user } = useAppContext();
+  const { liveMatch, isLoading: matchLoading, error: matchError } = useMatch();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'pre-match' | 'powerplay' | 'next-over' | 'innings'>('next-over');
   const [selectedBet, setSelectedBet] = useState<any>(null);
   const [betAmount, setBetAmount] = useState<number>(100);
   const [loading, setLoading] = useState(false);
 
-  const bettingOptions = {
-    'pre-match': [
-      { id: 'pm1', title: 'Match Winner', options: ['MI', 'CSK'], multiplier: 1.8 },
-      { id: 'pm2', title: 'Toss Winner', options: ['MI', 'CSK'], multiplier: 1.9 },
-    ],
-    'powerplay': [
-      { id: 'pp1', title: 'Powerplay Runs', options: ['< 45', '45-55', '> 55'], multiplier: 2.5 },
-      { id: 'pp2', title: 'Powerplay Wickets', options: ['0', '1', '2+'], multiplier: 3.0 },
-    ],
-    'next-over': [
-      { id: 'no1', title: 'Runs in Next Over', options: ['0-5', '6-10', '11-15', '16+'], multiplier: 2.2 },
-      { id: 'no2', title: 'Wicket in Next Over', options: ['Yes', 'No'], multiplier: 4.5 },
-      { id: 'no3', title: 'Boundary in Next Over', options: ['Yes', 'No'], multiplier: 1.8 },
-    ],
-    'innings': [
-      { id: 'in1', title: 'Total Innings Score', options: ['< 180', '180-200', '> 200'], multiplier: 2.0 },
-      { id: 'in2', title: 'Highest Run Scorer', options: ['Rohit', 'Hardik', 'Sky'], multiplier: 3.5 },
-    ]
+  // Generate betting options dynamically based on liveMatch (reactive like Home.tsx)
+  const getBettingOptions = () => {
+    if (!liveMatch) {
+      return {
+        'pre-match': [
+          { id: 'pm1', title: 'Match Winner', options: ['Team 1', 'Team 2'], multiplier: 1.8 },
+          { id: 'pm2', title: 'Toss Winner', options: ['Team 1', 'Team 2'], multiplier: 1.9 },
+        ],
+        'powerplay': [
+          { id: 'pp1', title: 'Powerplay Runs', options: ['< 45', '45-55', '> 55'], multiplier: 2.5 },
+          { id: 'pp2', title: 'Powerplay Wickets', options: ['0', '1', '2+'], multiplier: 3.0 },
+        ],
+        'next-over': [
+          { id: 'no1', title: 'Runs in Next Over', options: ['0-5', '6-10', '11-15', '16+'], multiplier: 2.2 },
+          { id: 'no2', title: 'Wicket in Next Over', options: ['Yes', 'No'], multiplier: 4.5 },
+          { id: 'no3', title: 'Boundary in Next Over', options: ['Yes', 'No'], multiplier: 1.8 },
+        ],
+        'innings': [
+          { id: 'in1', title: 'Total Innings Score', options: ['< 180', '180-200', '> 200'], multiplier: 2.0 },
+          { id: 'in2', title: 'Highest Run Scorer', options: ['Rohit', 'Hardik', 'Sky'], multiplier: 3.5 },
+        ]
+      };
+    }
+
+    // LIVE DATA - Use actual team names from database
+    return {
+      'pre-match': [
+        { id: 'pm1', title: 'Match Winner', options: [liveMatch.team1_sname, liveMatch.team2_sname], multiplier: 1.8 },
+        { id: 'pm2', title: 'Toss Winner', options: [liveMatch.team1_sname, liveMatch.team2_sname], multiplier: 1.9 },
+      ],
+      'powerplay': [
+        { id: 'pp1', title: 'Powerplay Runs', options: ['< 45', '45-55', '> 55'], multiplier: 2.5 },
+        { id: 'pp2', title: 'Powerplay Wickets', options: ['0', '1', '2+'], multiplier: 3.0 },
+      ],
+      'next-over': [
+        { id: 'no1', title: 'Runs in Next Over', options: ['0-5', '6-10', '11-15', '16+'], multiplier: 2.2 },
+        { id: 'no2', title: 'Wicket in Next Over', options: ['Yes', 'No'], multiplier: 4.5 },
+        { id: 'no3', title: 'Boundary in Next Over', options: ['Yes', 'No'], multiplier: 1.8 },
+      ],
+      'innings': [
+        { id: 'in1', title: 'Total Innings Score', options: ['< 180', '180-200', '> 200'], multiplier: 2.0 },
+        { id: 'in2', title: 'Highest Run Scorer', options: ['Rohit', 'Hardik', 'Sky'], multiplier: 3.5 },
+      ]
+    };
   };
+
+  const bettingOptions = getBettingOptions();
+
+  // Debug - console log liveMatch on every render
+  console.log('[Betting] liveMatch:', {
+    loading: matchLoading,
+    team1: liveMatch?.team1_sname,
+    team2: liveMatch?.team2_sname,
+    score: `${liveMatch?.t1_inn1_runs}/${liveMatch?.t1_inn1_wickets}`,
+    match: liveMatch?.match_desc,
+  });
 
   const handlePlaceBet = async () => {
     if (!user || !roomId || !selectedBet || !betAmount) return;
@@ -46,7 +85,7 @@ const Betting: React.FC = () => {
       const betData = {
         room_id: roomId,
         user_id: user.id,
-        match_id: 'live_ipl_2026_01',
+        match_id: liveMatch?.match_id || 'unknown',
         type: activeTab,
         prediction: selectedBet.option,
         multiplier: selectedBet.multiplier,
@@ -107,6 +146,62 @@ const Betting: React.FC = () => {
           <Coins size={20} /> {user?.coins.toLocaleString()}
         </div>
       </header>
+
+      {/* Live Match Score Card */}
+      {!matchLoading && liveMatch && (
+        (() => {
+          // Dynamic innings detection - check which innings has runs
+          const team1Runs = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_runs : liveMatch.t1_inn2_runs;
+          const team1Wickets = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_wickets : liveMatch.t1_inn2_wickets;
+          const team1Overs = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_overs : liveMatch.t1_inn2_overs;
+
+          const team2Runs = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_runs : liveMatch.t2_inn2_runs;
+          const team2Wickets = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_wickets : liveMatch.t2_inn2_wickets;
+          const team2Overs = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_overs : liveMatch.t2_inn2_overs;
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                backgroundColor: 'rgba(0, 255, 178, 0.08)',
+                border: '1px solid rgba(0, 255, 178, 0.2)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '24px',
+              }}
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '0' }}>
+                {/* Team 1 */}
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 6px 0', fontWeight: '500' }}>
+                    {liveMatch.team1_sname}
+                  </p>
+                  <p style={{ fontSize: '20px', fontWeight: 'bold', color: '#00FFB2', margin: '0 0 4px 0' }}>
+                    {team1Runs}/{team1Wickets}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+                    ({team1Overs} ov)
+                  </p>
+                </div>
+
+                {/* Team 2 */}
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 6px 0', fontWeight: '500' }}>
+                    {liveMatch.team2_sname}
+                  </p>
+                  <p style={{ fontSize: '20px', fontWeight: 'bold', color: team2Runs > 0 ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)', margin: '0 0 4px 0' }}>
+                    {team2Runs > 0 ? `${team2Runs}/${team2Wickets}` : '—'}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+                    {team2Runs > 0 ? `(${team2Overs} ov)` : 'Yet to bat'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()
+      )}
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '32px', overflowX: 'auto', paddingBottom: '8px' }}>
         <button onClick={() => setActiveTab('pre-match')} style={tabStyle('pre-match')}>Pre-Match</button>

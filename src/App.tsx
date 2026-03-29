@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider, useAppContext } from './context/AppContext';
+import { MatchProvider } from './context/MatchContext';
 import Navbar from './components/Navbar';
 import BottomNav from './components/BottomNav';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -83,9 +84,11 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <MatchProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </MatchProvider>
       </AppProvider>
     </ErrorBoundary>
   );

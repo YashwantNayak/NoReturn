@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { useMatch } from '../context/MatchContext';
 import { PlayCircle, Trophy, Flame } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../supabaseClient';
@@ -15,6 +16,7 @@ interface LeaderboardPlayer {
 
 const Home: React.FC = () => {
   const { user } = useAppContext();
+  const { liveMatch, isLoading: matchLoading, error: matchError } = useMatch();
   const navigate = useNavigate();
   const [topPlayers, setTopPlayers] = useState<LeaderboardPlayer[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
@@ -58,70 +60,177 @@ const Home: React.FC = () => {
     <div style={{ padding: 'clamp(16px, 5vw, 32px)', maxWidth: '1200px', margin: '0 auto', color: '#FFFFFF', paddingBottom: 'clamp(32px, 5vw, 64px)' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: 'clamp(24px, 6vw, 32px)', fontWeight: 'bold', margin: '0 0 8px 0' }}>Hi {user.displayName} 👋</h1>
+        <h1 style={{ fontSize: 'clamp(24px, 6vw, 32px)', fontWeight: 'bold', margin: '0 0 8px 0' }}>Hi {user.displayName} </h1>
         <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>Ready for today's IPL action?</p>
       </div>
 
       {/* Today's Live Match */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          backgroundImage: 'linear-gradient(135deg, rgba(0, 255, 178, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
-          borderRadius: '16px',
-          padding: '24px',
-          border: '2px solid #00FFB2',
-          marginBottom: '40px',
-          boxShadow: '0 0 30px rgba(0, 255, 178, 0.1)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <Flame size={20} color="#FF7A00" />
-          <span style={{ fontSize: '12px', color: '#FF7A00', fontWeight: 'bold', textTransform: 'uppercase' }}>LIVE NOW</span>
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <p style={{ fontSize: '26px', fontWeight: 'bold', color: '#00FFB2', margin: '0 0 4px 0' }}>MI vs CSK</p>
-          <p style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>Indian Premier League 2026</p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '10px', textAlign: 'center' }}>
-            <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', margin: '0 0 4px 0' }}>MI Score</p>
-            <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#FFFFFF', margin: 0 }}>145/8</p>
-          </div>
-          <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '10px', textAlign: 'center' }}>
-            <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', margin: '0 0 4px 0' }}>Overs</p>
-            <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#FFFFFF', margin: 0 }}>18.3</p>
-          </div>
-          <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '10px', textAlign: 'center' }}>
-            <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', margin: '0 0 4px 0' }}>Online</p>
-            <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#00FFB2', margin: 0 }}>2.3K</p>
-          </div>
-        </div>
-
-        <button 
-          onClick={() => navigate('/global-room')}
+      {matchLoading ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           style={{
-            width: '100%',
-            padding: '14px',
-            backgroundColor: '#00FFB2',
-            color: '#000000',
-            border: 'none',
-            borderRadius: '10px',
-            fontWeight: 'bold',
-            fontSize: '16px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            transition: 'all 0.2s ease'
+            backgroundImage: 'linear-gradient(135deg, rgba(0, 255, 178, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '2px solid #00FFB2',
+            marginBottom: '40px',
+            boxShadow: '0 0 30px rgba(0, 255, 178, 0.1)',
           }}
         >
-          <PlayCircle size={20} /> Join Live Betting
-        </button>
-      </motion.div>
+          <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+            <p>Loading match data...</p>
+          </div>
+        </motion.div>
+      ) : matchError ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            backgroundImage: 'linear-gradient(135deg, rgba(255, 112, 112, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '2px solid #FF5252',
+            marginBottom: '40px',
+            boxShadow: '0 0 30px rgba(255, 82, 82, 0.1)',
+          }}
+        >
+          <div style={{ textAlign: 'center', color: '#FF5252' }}>
+            <p>Error loading match: {matchError}</p>
+          </div>
+        </motion.div>
+      ) : liveMatch ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            backgroundImage: 'linear-gradient(135deg, rgba(0, 255, 178, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '2px solid #00FFB2',
+            marginBottom: '40px',
+            boxShadow: '0 0 30px rgba(0, 255, 178, 0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <Flame size={20} color="#FF7A00" />
+            <span 
+              style={{ 
+                fontSize: '12px', 
+                fontWeight: 'bold', 
+                textTransform: 'uppercase',
+                color: liveMatch.state === 'In Progress' ? '#FF7A00' : '#00FFB2'
+              }}
+            >
+              {liveMatch.state === 'In Progress' ? 'LIVE NOW' : liveMatch.state}
+            </span>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ fontSize: '26px', fontWeight: 'bold', color: '#00FFB2', margin: '0 0 4px 0' }}>
+              {liveMatch.team1_sname} vs {liveMatch.team2_sname}
+            </p>
+            <p style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
+              {liveMatch.series_name}
+            </p>
+          </div>
+
+          {/* Scores Section — Dynamic innings detection */}
+          {(() => {
+            // Team 1 actual score (check which innings has runs)
+            const team1Runs = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_runs : liveMatch.t1_inn2_runs;
+            const team1Wickets = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_wickets : liveMatch.t1_inn2_wickets;
+            const team1Overs = liveMatch.t1_inn1_runs > 0 ? liveMatch.t1_inn1_overs : liveMatch.t1_inn2_overs;
+
+            // Team 2 actual score (check which innings has runs)
+            const team2Runs = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_runs : liveMatch.t2_inn2_runs;
+            const team2Wickets = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_wickets : liveMatch.t2_inn2_wickets;
+            const team2Overs = liveMatch.t2_inn1_runs > 0 ? liveMatch.t2_inn1_overs : liveMatch.t2_inn2_overs;
+
+            const bothTeamsHaveZero = team1Runs === 0 && team2Runs === 0;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                {/* Team 1 Score */}
+                <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 6px 0', fontWeight: '500' }}>
+                    {liveMatch.team1_sname}
+                  </p>
+                  <p style={{ fontSize: '22px', fontWeight: 'bold', color: team1Runs > 0 ? '#00FFB2' : 'rgba(255, 255, 255, 0.3)', margin: '0 0 2px 0' }}>
+                    {team1Runs > 0 ? `${team1Runs}/${team1Wickets}` : '—'}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+                    {team1Runs > 0 ? `(${team1Overs} ov)` : bothTeamsHaveZero ? 'Yet to bat' : 'Finished'}
+                  </p>
+                </div>
+
+                {/* Team 2 Score */}
+                <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 6px 0', fontWeight: '500' }}>
+                    {liveMatch.team2_sname}
+                  </p>
+                  <p style={{ fontSize: '22px', fontWeight: 'bold', color: team2Runs > 0 ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)', margin: '0 0 2px 0' }}>
+                    {team2Runs > 0 ? `${team2Runs}/${team2Wickets}` : '—'}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+                    {team2Runs > 0 ? `(${team2Overs} ov)` : bothTeamsHaveZero ? 'Yet to bat' : 'Finished'}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Status Section */}
+          <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px' }}>
+            <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)', margin: 0, fontWeight: '500' }}>
+              {liveMatch.state === 'In Progress' 
+                ? `⚡ LIVE · ${liveMatch.t1_inn1_overs} overs`
+                : liveMatch.state === 'Complete'
+                ? liveMatch.status
+                : liveMatch.status}
+            </p>
+          </div>
+
+          <button 
+            onClick={() => navigate('/global-room')}
+            style={{
+              width: '100%',
+              padding: '14px',
+              backgroundColor: '#00FFB2',
+              color: '#000000',
+              border: 'none',
+              borderRadius: '10px',
+              fontWeight: 'bold',
+              fontSize: '16px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <PlayCircle size={20} /> Join Live Betting
+          </button>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            backgroundImage: 'linear-gradient(135deg, rgba(100, 100, 100, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            marginBottom: '40px',
+            boxShadow: '0 0 30px rgba(100, 100, 100, 0.1)',
+          }}
+        >
+          <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+            <p>No live match at the moment. Stay tuned!</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Quick Stats */}
       <section style={{ marginBottom: '40px' }}>

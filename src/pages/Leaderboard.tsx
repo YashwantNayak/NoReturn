@@ -17,27 +17,79 @@ const Leaderboard: React.FC = () => {
   const { user } = useAppContext();
   const [displayedPlayers, setDisplayedPlayers] = useState<LeaderboardPlayer[]>([]);
   const [allPlayers, setAllPlayers] = useState<LeaderboardPlayer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isFetchingFresh, setIsFetchingFresh] = useState(true); // Background fetch indicator
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const INITIAL_LOAD = 10;
   const LOAD_MORE_COUNT = 10;
+  const CACHE_KEY = 'leaderboard_cache';
+  const CACHE_EXPIRY_KEY = 'leaderboard_cache_expiry';
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  /**
+   * Get cached leaderboard data
+   */
+  const getCachedLeaderboard = (): LeaderboardPlayer[] | null => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+      
+      if (!cached || !expiry) return null;
+      
+      // Check if cache expired
+      if (Date.now() > parseInt(expiry)) {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem(CACHE_EXPIRY_KEY);
+        return null;
+      }
+      
+      console.log('[Leaderboard] Loading from cache...');
+      return JSON.parse(cached);
+    } catch (err) {
+      console.warn('[Leaderboard] Cache read error:', err);
+      return null;
+    }
+  };
+
+  /**
+   * Save leaderboard data to cache
+   */
+  const setCachedLeaderboard = (players: LeaderboardPlayer[]): void => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(players));
+      localStorage.setItem(CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION).toString());
+      console.log('[Leaderboard] Cache saved ✅');
+    } catch (err) {
+      console.warn('[Leaderboard] Cache write error:', err);
+    }
+  };
 
   useEffect(() => {
-    const fetchInitialLeaderboard = async () => {
+    const loadLeaderboard = async () => {
       try {
-        setLoading(true);
-        setError(null);
+        // Step 1: Try to load from cache first
+        const cachedPlayers = getCachedLeaderboard();
+        if (cachedPlayers && cachedPlayers.length > 0) {
+          setDisplayedPlayers(cachedPlayers.slice(0, INITIAL_LOAD));
+          setAllPlayers(cachedPlayers);
+          setHasMore(cachedPlayers.length > INITIAL_LOAD);
+          console.log(`[Leaderboard] Displaying ${INITIAL_LOAD} cached players`);
+        } else {
+          // No cache, show loading
+          setLoading(true);
+        }
 
-        console.log('[Leaderboard] Fetching initial players...');
+        // Step 2: Fetch fresh data in background
+        setIsFetchingFresh(true);
+        console.log('[Leaderboard] Fetching fresh data...');
 
-        // Fetch first batch + 1 to know if there are more
         const { data, error: fetchError } = await supabase
           .from('profiles')
           .select('id, display_name, photo_url, coins, win_rate')
           .order('coins', { ascending: false })
-          .limit(INITIAL_LOAD + 1);
+          .limit(1000); // Fetch all for caching
 
         if (fetchError) {
           console.error('[Leaderboard] Supabase error:', fetchError);
@@ -46,30 +98,35 @@ const Leaderboard: React.FC = () => {
 
         const mappedData = mapPlayers(data || []);
         
-        // Check if there are more players
+        // Update state with fresh data
+        setAllPlayers(mappedData);
+        setDisplayedPlayers(mappedData.slice(0, INITIAL_LOAD));
         setHasMore(mappedData.length > INITIAL_LOAD);
         
-        // Store all fetched, but only display first batch
-        setAllPlayers(mappedData.slice(0, mappedData.length - (mappedData.length > INITIAL_LOAD ? 1 : 0)));
-        setDisplayedPlayers(mappedData.slice(0, INITIAL_LOAD));
+        // Save to cache
+        setCachedLeaderboard(mappedData);
         
-        console.log(`[Leaderboard] Loaded ${INITIAL_LOAD} initial players, hasMore: ${mappedData.length > INITIAL_LOAD}`);
+        console.log(`[Leaderboard] ✅ Fresh data loaded: ${mappedData.length} players`);
       } catch (err: any) {
         console.error('[Leaderboard] Error fetching:', err.message);
-        setError(`Failed to load leaderboard: ${err.message}`);
+        if (!allPlayers.length) {
+          // Only show error if no cached data
+          setError(`Failed to load leaderboard: ${err.message}`);
+        }
       } finally {
         setLoading(false);
+        setIsFetchingFresh(false);
       }
     };
 
-    fetchInitialLeaderboard();
+    loadLeaderboard();
   }, []);
 
   const mapPlayers = (data: any[]): LeaderboardPlayer[] => {
     return data.map((player: any) => ({
       id: player.id,
       displayName: player.display_name || 'Unknown',
-      photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.display_name}`,
+      photoURL: player.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(player.display_name || player.id)}`,
       coins: player.coins || 0,
       winRate: player.win_rate || 0,
     }));
@@ -123,14 +180,20 @@ const Leaderboard: React.FC = () => {
           <Trophy size={28} color={colors.accent} />
           <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0, color: colors.primary }}>LEADERBOARD</h1>
         </div>
-        <p style={{ fontSize: '12px', color: colors.muted, margin: '10px 0 0 0' }}>.</p>
+        {/* <p style={{ fontSize: '12px', color: colors.muted, margin: '10px 0 0 0' }}>
+          {isFetchingFresh && <span>.</span>}
+        </p> */}
       </div>
 
       {loading ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', color: colors.muted }}>
+          {/* <div style={{ animation: 'spin 1s linear infinite', display: 'inline-block', marginBottom: '12px' }}>
+            ⚙️
+          </div> */}
           <p>Loading leaderboard...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      ) : error ? (
+      ) : error && displayedPlayers.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', color: '#FF5252' }}>
           <p>{error}</p>
         </div>

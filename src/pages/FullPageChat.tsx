@@ -101,7 +101,7 @@ const MessageBubble = React.memo(({
         <img
           src={
             msg.photo_url ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.display_name}`
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(msg.display_name || msg.user_id)}`
           }
           width={28}
           height={28}
@@ -235,7 +235,7 @@ const MessageBubble = React.memo(({
         <img
           src={
             userPhoto ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=user`
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(msg.user_id)}`
           }
           width={28}
           height={28}
